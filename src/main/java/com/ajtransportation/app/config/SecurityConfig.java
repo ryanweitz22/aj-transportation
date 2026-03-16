@@ -14,21 +14,11 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                // ✅ PUBLIC pages — anyone can see these
-                .requestMatchers("/", "/index", "/about", "/contact", "/bookings").permitAll()
-                .requestMatchers("/login", "/register").permitAll()
-                .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
-                // 🔒 PROTECTED pages — must be logged in
-                .requestMatchers("/dashboard/**").authenticated()
-                .requestMatchers("/admin/**").hasRole("ADMIN")
-                // Everything else requires login
-                .anyRequest().authenticated()
+                // Allow everything for now during frontend development
+                .anyRequest().permitAll()
             )
-            .formLogin(form -> form
-                .loginPage("/login")
-                .defaultSuccessUrl("/dashboard", true)
-                .permitAll()
-            )
+            .csrf(csrf -> csrf.disable())
+            .formLogin(form -> form.disable())
             .logout(logout -> logout
                 .logoutSuccessUrl("/")
                 .permitAll()
