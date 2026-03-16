@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+# AJ Transportation - Secret files
+src/main/resources/application.properties
+src/main/resources/application-local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
