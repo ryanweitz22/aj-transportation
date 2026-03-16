@@ -1,0 +1,189 @@
+/* ================================================
+   BOOKINGS PAGE — ADDITIONAL STYLES
+   ================================================ */
+
+.bookings-page { padding-top: var(--nav-h); min-height: 100vh; background: var(--bg); }
+
+.bookings-header {
+    background: white; border-bottom: 1px solid var(--border);
+    padding: 28px 0;
+}
+.bh-inner { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.bh-inner h1 { font-size: 1.75rem; margin-bottom: 4px; }
+.bh-inner p { color: var(--text-muted); font-size: 0.9rem; }
+.bh-legend { display: flex; gap: 20px; flex-shrink: 0; padding-bottom: 4px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 500; color: var(--text-body); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.legend-dot.dot-available { background: var(--success); }
+.legend-dot.dot-booked { background: var(--danger); }
+.legend-dot.dot-pending { background: var(--accent); }
+
+.bookings-body { padding: 32px 24px; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+/* ---- MONTH JUMP SELECT ---- */
+.month-jump-select {
+    padding: 6px 12px; border-radius: var(--radius-full);
+    border: 1px solid var(--border); font-size: 0.8rem;
+    font-family: var(--font-body); color: var(--text-dark);
+    background: var(--bg); cursor: pointer; outline: none;
+}
+.month-jump-select:focus { border-color: var(--primary); }
+
+/* ---- WEEK SCROLL ---- */
+.week-scroll-wrap { overflow-x: auto; }
+.week-view-grid {
+    display: grid;
+    grid-template-columns: 72px repeat(7, minmax(100px, 1fr));
+    min-width: 800px;
+}
+
+/* ---- DAY HEADERS ---- */
+.week-day-header {
+    padding: 12px 8px; text-align: center;
+    font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+}
+.week-day-header.today { color: var(--primary); }
+.week-day-header .day-name { display: block; font-size: 0.65rem; margin-bottom: 4px; }
+.week-day-header .day-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-head); font-size: 1.1rem; font-weight: 800;
+    color: var(--text-dark); width: 34px; height: 34px; border-radius: 50%;
+}
+.week-day-header.today .day-num { background: var(--primary); color: white; }
+.week-day-header.time-label-col { background: var(--bg); border-right: 1px solid var(--border-dark); }
+
+/* ---- TIME ROWS ---- */
+.time-slot-row {
+    display: contents; /* each row = 8 cells inside the grid */
+}
+.time-label {
+    height: 56px; display: flex; align-items: flex-start; justify-content: flex-end;
+    padding: 6px 10px 0 0;
+    font-size: 0.68rem; font-weight: 600; color: var(--text-light);
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border-dark);
+    background: var(--bg);
+}
+.week-cell {
+    height: 56px; border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 3px; position: relative;
+    cursor: pointer; transition: background 0.15s ease;
+}
+.week-cell:hover:not(.cell-booked):not(.cell-past) { background: rgba(10,124,110,0.06); }
+.week-cell.cell-available { background: #f0fdf9; }
+.week-cell.cell-available:hover { background: #c6f6ed; }
+.week-cell.cell-booked { background: #fff5f5; cursor: not-allowed; }
+.week-cell.cell-pending { background: #fffbeb; cursor: default; }
+.week-cell.cell-past { background: var(--bg); cursor: default; opacity: 0.45; }
+.week-cell.cell-empty { cursor: default; }
+
+/* ---- SLOT PILLS ---- */
+.slot-pill {
+    position: absolute; inset: 3px;
+    border-radius: 5px; padding: 3px 6px;
+    display: flex; flex-direction: column; justify-content: center; gap: 1px;
+    pointer-events: none;
+}
+.pill-available { background: rgba(10,124,110,0.1); border: 1px solid rgba(10,124,110,0.25); }
+.pill-booked { background: rgba(229,62,62,0.1); border: 1px solid rgba(229,62,62,0.2); }
+.pill-pending { background: rgba(240,165,0,0.12); border: 1px solid rgba(240,165,0,0.3); }
+.pill-label {
+    font-size: 0.65rem; font-weight: 700;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pill-available .pill-label { color: var(--primary); }
+.pill-booked .pill-label { color: var(--danger); }
+.pill-pending .pill-label { color: #92400e; }
+.pill-time { font-size: 0.6rem; opacity: 0.7; }
+.pill-available .pill-time { color: var(--primary); }
+.pill-booked .pill-time { color: var(--danger); }
+.pill-price {
+    font-size: 0.62rem; font-weight: 600;
+    margin-top: 1px;
+}
+.pill-available .pill-price { color: var(--primary); }
+
+/* ---- BOOKING MODAL ---- */
+.booking-modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 24px;
+}
+.booking-modal-overlay.open { display: flex; }
+.booking-modal {
+    background: white; border-radius: var(--radius-lg);
+    width: 100%; max-width: 440px; box-shadow: var(--shadow-lg);
+    animation: floatUp 0.25s ease;
+}
+.modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px; border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { font-size: 1.1rem; }
+.modal-close {
+    width: 30px; height: 30px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 0.9rem; transition: var(--transition);
+}
+.modal-close:hover { background: var(--bg); color: var(--text-dark); }
+.modal-body { padding: 24px; }
+.modal-trip-info {
+    background: var(--bg); border-radius: var(--radius-sm);
+    padding: 16px; margin-bottom: 20px;
+}
+.modal-trip-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.modal-trip-row:last-child { margin-bottom: 0; }
+.modal-trip-label { font-size: 0.8rem; color: var(--text-muted); }
+.modal-trip-value { font-size: 0.875rem; font-weight: 600; color: var(--text-dark); }
+.modal-notice {
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-sm);
+    padding: 12px 16px; font-size: 0.875rem; color: #1d4ed8;
+    display: flex; align-items: center; gap: 10px;
+}
+.modal-notice a { color: var(--primary); font-weight: 600; }
+.modal-confirm-text { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 16px; }
+.modal-price-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; background: var(--primary-light);
+    border-radius: var(--radius-sm); border: 1px solid rgba(10,124,110,0.2);
+}
+.modal-price-row span:first-child { font-size: 0.875rem; color: var(--text-muted); }
+.modal-price { font-family: var(--font-head); font-size: 1.3rem; font-weight: 800; color: var(--primary); }
+
+/* ---- UPCOMING LIST ---- */
+.upcoming-section { background: white; border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+.upcoming-list { padding: 0; }
+.upcoming-item {
+    display: grid; grid-template-columns: 56px 1fr auto auto;
+    align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    transition: background 0.15s ease;
+}
+.upcoming-item:last-child { border-bottom: none; }
+.upcoming-item:hover { background: var(--bg); }
+.upcoming-date-box {
+    background: var(--primary-light); border-radius: var(--radius-sm);
+    text-align: center; padding: 8px 4px; flex-shrink: 0;
+}
+.upcoming-date-box .udb-day { font-family: var(--font-head); font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1; }
+.upcoming-date-box .udb-mon { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: var(--primary); opacity: 0.7; margin-top: 2px; }
+.upcoming-info h4 { font-size: 0.9rem; margin-bottom: 2px; }
+.upcoming-info p { font-size: 0.8rem; color: var(--text-muted); }
+.upcoming-price { font-family: var(--font-head); font-weight: 700; color: var(--text-dark); font-size: 1rem; }
+.upcoming-empty { padding: 56px 24px; text-align: center; color: var(--text-muted); }
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 768px) {
+    .bh-inner { flex-direction: column; align-items: flex-start; }
+    .bh-legend { gap: 14px; }
+    .calendar-header { flex-wrap: wrap; gap: 12px; }
+    .upcoming-item { grid-template-columns: 48px 1fr auto; }
+    .upcoming-price { display: none; }
+}

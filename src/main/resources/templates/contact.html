@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us | AJ Transportation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+    <div class="nav-container">
+        <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
+        <div class="nav-links">
+            <a th:href="@{/}">Home</a>
+            <a th:href="@{/bookings}">Bookings</a>
+            <a th:href="@{/about}">About</a>
+            <a th:href="@{/contact}" class="active">Contact</a>
+        </div>
+        <div class="nav-actions">
+            <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:10px;">
+                <span class="nav-user" sec:authentication="name"></span>
+                <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
+                <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
+            </div>
+            <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:10px;">
+                <a th:href="@{/login}" class="btn-nav-login">Login</a>
+                <a th:href="@{/register}" class="btn-nav-register">Book Now</a>
+            </div>
+        </div>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
+    </div>
+    <div class="nav-mobile" id="mobileMenu">
+        <a th:href="@{/}">Home</a><a th:href="@{/bookings}">Bookings</a>
+        <a th:href="@{/about}">About</a><a th:href="@{/contact}">Contact</a>
+    </div>
+</nav>
+
+<!-- PAGE HEADER -->
+<div style="background: white; border-bottom: 1px solid var(--border); padding: calc(var(--nav-h) + 48px) 24px 48px;">
+    <div style="max-width: 1200px; margin: 0 auto;">
+        <div class="breadcrumb"><a href="/">Home</a><span>›</span><span>Contact</span></div>
+        <h1>Get in Touch</h1>
+        <p style="color:var(--text-muted);margin-top:8px;">Have a question? We'd love to hear from you.</p>
+    </div>
+</div>
+
+<!-- CONTACT LAYOUT -->
+<div class="contact-layout">
+
+    <!-- LEFT: Contact Info -->
+    <div class="contact-info">
+        <h2>Contact Details</h2>
+        <p>Reach out through any of the channels below. We typically respond within a few hours.</p>
+
+        <div class="contact-item">
+            <div class="contact-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.5a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.78h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.4a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.5 18z"/></svg>
+            </div>
+            <div class="contact-detail">
+                <h4>Phone / WhatsApp</h4>
+                <p>+27 XX XXX XXXX</p>
+                <p style="font-size:0.8rem;color:var(--text-light);">Available Mon–Sat, 07:00–18:00</p>
+            </div>
+        </div>
+
+        <div class="contact-item">
+            <div class="contact-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </div>
+            <div class="contact-detail">
+                <h4>Email</h4>
+                <p>info@ajtransportation.co.za</p>
+                <p style="font-size:0.8rem;color:var(--text-light);">We reply within 24 hours</p>
+            </div>
+        </div>
+
+        <div class="contact-item">
+            <div class="contact-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </div>
+            <div class="contact-detail">
+                <h4>Location</h4>
+                <p>South Africa</p>
+                <p style="font-size:0.8rem;color:var(--text-light);">Operating locally</p>
+            </div>
+        </div>
+
+        <!-- Social Links -->
+        <div class="contact-social">
+            <a href="https://facebook.com/ajtransportation" target="_blank" class="contact-social-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                Facebook
+            </a>
+            <a href="https://instagram.com/ajtransportation" target="_blank" class="contact-social-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                Instagram
+            </a>
+            <a href="https://wa.me/27XXXXXXXXX" target="_blank" class="contact-social-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.096.544 4.066 1.494 5.782L0 24l6.345-1.663A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/></svg>
+                WhatsApp
+            </a>
+        </div>
+    </div>
+
+    <!-- RIGHT: Contact Form -->
+    <div>
+        <div class="form-card" style="max-width:100%;">
+            <h3 style="margin-bottom:8px;">Send Us a Message</h3>
+            <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:28px;">Fill in the form and we'll get back to you shortly.</p>
+
+            <!-- Success / Error Messages (shown by Spring after form submit) -->
+            <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+            <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+
+            <form th:action="@{/contact}" method="post">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                <div class="form-group">
+                    <label class="form-label" for="name">Full Name</label>
+                    <input type="text" id="name" name="name" class="form-input" placeholder="Your full name" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="email">Email Address</label>
+                    <input type="email" id="email" name="email" class="form-input" placeholder="your@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="phone">Phone Number (optional)</label>
+                    <input type="tel" id="phone" name="phone" class="form-input" placeholder="+27 XX XXX XXXX">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="subject">Subject</label>
+                    <select id="subject" name="subject" class="form-input">
+                        <option value="">Select a topic...</option>
+                        <option value="booking">Booking Enquiry</option>
+                        <option value="payment">Payment Issue</option>
+                        <option value="cancellation">Cancellation Request</option>
+                        <option value="feedback">Feedback</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="message">Message</label>
+                    <textarea id="message" name="message" class="form-input" rows="5"
+                              placeholder="Tell us how we can help..." required
+                              style="resize: vertical; min-height: 120px;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">
+                    Send Message
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-brand">
+            <div class="footer-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></div>
+            <p>Reliable transport services tailored to your schedule.</p>
+            <div class="footer-social">
+                <a href="#" class="social-link"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+                <a href="#" class="social-link"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a>
+            </div>
+        </div>
+        <div class="footer-links"><h4>Quick Links</h4><a th:href="@{/}">Home</a><a th:href="@{/bookings}">Book a Trip</a><a th:href="@{/about}">About</a><a th:href="@{/contact}">Contact</a></div>
+        <div class="footer-links"><h4>Account</h4><a th:href="@{/register}">Register</a><a th:href="@{/login}">Login</a><a th:href="@{/dashboard}">My Bookings</a></div>
+        <div class="footer-contact"><h4>Contact Us</h4><p>📞 +27 XX XXX XXXX</p><p>✉️ info@ajtransportation.co.za</p></div>
+    </div>
+    <div class="footer-bottom"><p>© 2026 AJ Transportation. All rights reserved.</p></div>
+</footer>
+
+<script th:src="@{/js/main.js}"></script>
+</body>
+</html>

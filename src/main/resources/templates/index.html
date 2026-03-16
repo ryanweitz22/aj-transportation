@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AJ Transportation — Reliable Transport Booking</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+    <div class="nav-container">
+        <a href="/" class="nav-logo">
+            <div class="logo-aj">AJ</div>
+            <span class="logo-text">Transportation</span>
+        </a>
+        <div class="nav-links">
+            <a th:href="@{/}" class="active">Home</a>
+            <a th:href="@{/bookings}">Bookings</a>
+            <a th:href="@{/about}">About</a>
+            <a th:href="@{/contact}">Contact</a>
+        </div>
+        <div class="nav-actions">
+            <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:10px;">
+                <span class="nav-user" sec:authentication="name"></span>
+                <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
+                <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
+            </div>
+            <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:10px;">
+                <a th:href="@{/login}" class="btn-nav-login">Login</a>
+                <a th:href="@{/register}" class="btn-nav-register">Book Now</a>
+            </div>
+        </div>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
+    <div class="nav-mobile" id="mobileMenu">
+        <a th:href="@{/}">Home</a>
+        <a th:href="@{/bookings}">Bookings</a>
+        <a th:href="@{/about}">About</a>
+        <a th:href="@{/contact}">Contact</a>
+        <a th:href="@{/login}" class="mobile-login">Login</a>
+        <a th:href="@{/register}" class="mobile-register">Book Now</a>
+    </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="hero-grid-bg"></div>
+    <div class="hero-container">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <div class="hero-badge-dot"></div>
+                South Africa's Trusted Transport
+            </div>
+            <h1>Move Smarter,<br><span>Book Faster</span></h1>
+            <p>AJ Transportation gives you real-time trip availability, instant bookings, and hassle-free EFT payments — all in one place.</p>
+            <div class="hero-actions">
+                <a th:href="@{/register}" class="btn btn-primary btn-lg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Book a Trip
+                </a>
+                <a th:href="@{/about}" class="btn btn-white btn-lg" style="background:rgba(255,255,255,0.1);color:white;border:1.5px solid rgba(255,255,255,0.2);">
+                    Learn More
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div>
+                    <div class="hero-stat-num">500+</div>
+                    <div class="hero-stat-label">Happy Passengers</div>
+                </div>
+                <div>
+                    <div class="hero-stat-num">100%</div>
+                    <div class="hero-stat-label">Reliable Service</div>
+                </div>
+                <div>
+                    <div class="hero-stat-num">24/7</div>
+                    <div class="hero-stat-label">Online Booking</div>
+                </div>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <div class="hero-cards">
+                <div class="hero-card">
+                    <div class="card-label">Next Available Trip</div>
+                    <div class="card-value">Tomorrow, 08:00</div>
+                    <div class="card-sub">Cape Town → City Centre</div>
+                    <span class="card-status status-available">● Available</span>
+                </div>
+                <div class="hero-card">
+                    <div class="card-label">This Week's Bookings</div>
+                    <div class="card-value">14 Trips</div>
+                    <div class="card-sub">3 slots remaining today</div>
+                    <span class="card-status status-available">● Live</span>
+                </div>
+                <div class="hero-card" style="display:flex;align-items:center;gap:16px;padding:20px 28px;">
+                    <div style="font-size:1.8rem;">🔒</div>
+                    <div>
+                        <div class="card-label">Secure EFT Payments</div>
+                        <div style="color:white;font-weight:600;font-size:0.9rem;">Powered by Ozow</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section bg-white">
+    <div class="section-inner">
+        <div class="section-label">Why Choose AJ Transportation</div>
+        <h2 class="section-title">Everything You Need,<br>Nothing You Don't</h2>
+        <p class="section-sub">Simple, reliable, and built for South African commuters and travellers.</p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">📅</div>
+                <h3>Real-Time Availability</h3>
+                <p>View the full weekly schedule at a glance. Available and booked slots update instantly so you always see the truth.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💳</div>
+                <h3>EFT Payments via Ozow</h3>
+                <p>No card needed. Pay securely using South African EFT through Ozow — fast, safe, and locally trusted.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔔</div>
+                <h3>Instant Confirmation</h3>
+                <p>Book your seat and receive an email confirmation immediately. Your spot is locked the moment you pay.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">👤</div>
+                <h3>Your Own Account</h3>
+                <p>Register once with your email and password. Access your booking history, manage trips, and check your status anytime.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📱</div>
+                <h3>Works on Any Device</h3>
+                <p>Book from your phone, tablet, or laptop. The site adapts perfectly to whatever screen you're using.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>Safe & Secure</h3>
+                <p>Your data is protected with industry-standard encryption. Passwords are never stored in plain text.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-it-works">
+    <div class="section-inner">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title" style="color:white;">Book a Trip in 4 Simple Steps</h2>
+        <p class="section-sub">From registration to arrival, the entire process is designed to be quick and straightforward.</p>
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-num">1</div>
+                <h3>Create Account</h3>
+                <p>Register with your email, username, and password. Takes less than a minute.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-num">2</div>
+                <h3>Browse Schedule</h3>
+                <p>View the weekly calendar. Green slots are available, red ones are already taken.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-num">3</div>
+                <h3>Select Your Trip</h3>
+                <p>Pick your date and time. The fare is shown upfront so there are no surprises.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-num">4</div>
+                <h3>Pay & Confirm</h3>
+                <p>Pay securely via Ozow EFT. Your booking is confirmed instantly by email.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <div class="container">
+        <h2>Ready to Book Your Trip?</h2>
+        <p>Join hundreds of passengers who trust AJ Transportation for their daily commute.</p>
+        <div class="cta-actions">
+            <a th:href="@{/register}" class="btn btn-white btn-lg">Create Free Account</a>
+            <a th:href="@{/contact}" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1.5px solid rgba(255,255,255,0.3);">Contact Us</a>
+        </div>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-brand">
+            <div class="footer-logo">
+                <div class="logo-aj">AJ</div>
+                <span class="logo-text">Transportation</span>
+            </div>
+            <p>Reliable, professional transport services tailored to your schedule.</p>
+            <div class="footer-social">
+                <a href="#" class="social-link" aria-label="Facebook">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                </a>
+                <a href="#" class="social-link" aria-label="Instagram">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                </a>
+                <a href="#" class="social-link" aria-label="WhatsApp">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.096.544 4.066 1.494 5.782L0 24l6.345-1.663A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.369l-.36-.214-3.724.976.993-3.63-.234-.373A9.818 9.818 0 1 1 12 21.818z"/></svg>
+                </a>
+            </div>
+        </div>
+        <div class="footer-links">
+            <h4>Quick Links</h4>
+            <a th:href="@{/}">Home</a>
+            <a th:href="@{/bookings}">Book a Trip</a>
+            <a th:href="@{/about}">About Us</a>
+            <a th:href="@{/contact}">Contact</a>
+        </div>
+        <div class="footer-links">
+            <h4>Account</h4>
+            <a th:href="@{/register}">Register</a>
+            <a th:href="@{/login}">Login</a>
+            <a th:href="@{/dashboard}">My Bookings</a>
+        </div>
+        <div class="footer-contact">
+            <h4>Contact Us</h4>
+            <p>📞 +27 XX XXX XXXX</p>
+            <p>✉️ info@ajtransportation.co.za</p>
+            <p>📍 South Africa</p>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>© 2026 AJ Transportation. All rights reserved.</p>
+    </div>
+</footer>
+
+<script th:src="@{/js/main.js}"></script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Us | AJ Transportation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+    <div class="nav-container">
+        <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
+        <div class="nav-links">
+            <a th:href="@{/}">Home</a>
+            <a th:href="@{/bookings}">Bookings</a>
+            <a th:href="@{/about}" class="active">About</a>
+            <a th:href="@{/contact}">Contact</a>
+        </div>
+        <div class="nav-actions">
+            <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:10px;">
+                <span class="nav-user" sec:authentication="name"></span>
+                <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
+                <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
+            </div>
+            <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:10px;">
+                <a th:href="@{/login}" class="btn-nav-login">Login</a>
+                <a th:href="@{/register}" class="btn-nav-register">Book Now</a>
+            </div>
+        </div>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
+    </div>
+    <div class="nav-mobile" id="mobileMenu">
+        <a th:href="@{/}">Home</a><a th:href="@{/bookings}">Bookings</a>
+        <a th:href="@{/about}">About</a><a th:href="@{/contact}">Contact</a>
+    </div>
+</nav>
+
+<!-- ABOUT HERO -->
+<section style="padding: calc(var(--nav-h) + 64px) 24px 80px; background: white; border-bottom: 1px solid var(--border);">
+    <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center;">
+        <div>
+            <div class="section-label">About AJ Transportation</div>
+            <h1 style="margin-bottom: 20px;">Reliable Rides,<br><span style="color: var(--primary);">Built on Trust</span></h1>
+            <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 32px; line-height: 1.8;">
+                AJ Transportation was founded with a simple mission: make professional, affordable transport accessible to everyone in South Africa. We believe getting from A to B should be stress-free, predictable, and affordable.
+            </p>
+            <p style="color: var(--text-muted); margin-bottom: 32px; line-height: 1.8;">
+                Our online booking platform gives passengers full visibility into available trips, fair pricing set by the owner, and secure EFT payment — no cash, no surprises.
+            </p>
+            <div style="display: flex; gap: 32px;">
+                <div>
+                    <div style="font-family: var(--font-head); font-size: 2rem; font-weight: 800; color: var(--primary);">500+</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">Happy Passengers</div>
+                </div>
+                <div>
+                    <div style="font-family: var(--font-head); font-size: 2rem; font-weight: 800; color: var(--primary);">100%</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">On-Time Record</div>
+                </div>
+                <div>
+                    <div style="font-family: var(--font-head); font-size: 2rem; font-weight: 800; color: var(--primary);">3+</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">Years Operating</div>
+                </div>
+            </div>
+        </div>
+        <div style="background: linear-gradient(135deg, var(--primary-light), #e6f4f1); border-radius: var(--radius-lg); padding: 48px; display: flex; flex-direction: column; gap: 20px;">
+            <div style="font-size: 3rem; text-align: center;">🚌</div>
+            <h3 style="text-align: center; color: var(--primary);">Our Promise</h3>
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="color: var(--primary); font-weight: 700; flex-shrink: 0;">✓</span>
+                    <p style="font-size: 0.9rem; color: var(--text-body);">Show up on time, every time</p>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="color: var(--primary); font-weight: 700; flex-shrink: 0;">✓</span>
+                    <p style="font-size: 0.9rem; color: var(--text-body);">Transparent pricing — no hidden fees</p>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="color: var(--primary); font-weight: 700; flex-shrink: 0;">✓</span>
+                    <p style="font-size: 0.9rem; color: var(--text-body);">Safe, clean, professional vehicles</p>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="color: var(--primary); font-weight: 700; flex-shrink: 0;">✓</span>
+                    <p style="font-size: 0.9rem; color: var(--text-body);">Instant booking confirmations</p>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="color: var(--primary); font-weight: 700; flex-shrink: 0;">✓</span>
+                    <p style="font-size: 0.9rem; color: var(--text-body);">Secure EFT payments via Ozow</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- VALUES -->
+<section class="section">
+    <div class="section-inner">
+        <div class="section-label">Our Values</div>
+        <h2 class="section-title">What Drives Us</h2>
+        <div class="values-grid" style="grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 48px;">
+            <div class="value-card feature-card">
+                <div class="value-icon feature-icon">🤝</div>
+                <h3>Trust</h3>
+                <p>We earn trust by being transparent — you always know when your trip is, how much it costs, and whether your seat is confirmed.</p>
+            </div>
+            <div class="value-card feature-card">
+                <div class="value-icon feature-icon">⏰</div>
+                <h3>Punctuality</h3>
+                <p>Your time is valuable. We take departure times seriously and communicate proactively if anything changes.</p>
+            </div>
+            <div class="value-card feature-card">
+                <div class="value-icon feature-icon">💚</div>
+                <h3>Community</h3>
+                <p>AJ Transportation is proudly South African. We're here to serve our local communities and grow together.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- SOCIAL MEDIA -->
+<section style="background: var(--bg-dark); padding: 80px 24px;">
+    <div style="max-width: 800px; margin: 0 auto; text-align: center;">
+        <div class="section-label" style="color: #4dd9c8;">Stay Connected</div>
+        <h2 style="color: white; margin-bottom: 16px;">Follow AJ Transportation</h2>
+        <p style="color: rgba(255,255,255,0.5); margin-bottom: 48px;">Stay up to date with trip updates, schedule changes, and promotions by following us on social media.</p>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px;">
+            <a href="https://facebook.com/ajtransportation" target="_blank"
+               style="display:flex;align-items:center;gap:12px;padding:16px 28px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius);color:white;font-weight:500;transition:var(--transition);"
+               onmouseover="this.style.background='#1877F2';this.style.borderColor='#1877F2';"
+               onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)';">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                Facebook
+            </a>
+            <a href="https://instagram.com/ajtransportation" target="_blank"
+               style="display:flex;align-items:center;gap:12px;padding:16px 28px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius);color:white;font-weight:500;transition:var(--transition);"
+               onmouseover="this.style.background='#E1306C';this.style.borderColor='#E1306C';"
+               onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)';">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                Instagram
+            </a>
+            <a href="https://wa.me/27XXXXXXXXX" target="_blank"
+               style="display:flex;align-items:center;gap:12px;padding:16px 28px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius);color:white;font-weight:500;transition:var(--transition);"
+               onmouseover="this.style.background='#25D366';this.style.borderColor='#25D366';"
+               onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)';">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.096.544 4.066 1.494 5.782L0 24l6.345-1.663A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.369l-.36-.214-3.724.976.993-3.63-.234-.373A9.818 9.818 0 1 1 12 21.818z"/></svg>
+                WhatsApp
+            </a>
+            <a href="mailto:info@ajtransportation.co.za"
+               style="display:flex;align-items:center;gap:12px;padding:16px 28px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius);color:white;font-weight:500;transition:var(--transition);"
+               onmouseover="this.style.background='var(--primary)';this.style.borderColor='var(--primary)';"
+               onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)';">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Email Us
+            </a>
+        </div>
+        <p style="color: rgba(255,255,255,0.3); margin-top: 32px; font-size: 0.85rem;">
+            📍 Update the links above with your actual social media handles
+        </p>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <div class="container">
+        <h2>Ready to Ride with Us?</h2>
+        <p>Book your first trip today and experience the AJ Transportation difference.</p>
+        <div class="cta-actions">
+            <a th:href="@{/register}" class="btn btn-white btn-lg">Get Started</a>
+            <a th:href="@{/contact}" class="btn btn-lg" style="background:rgba(255,255,255,0.15);color:white;border:1.5px solid rgba(255,255,255,0.3);">Get in Touch</a>
+        </div>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-brand">
+            <div class="footer-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></div>
+            <p>Reliable transport services tailored to your schedule.</p>
+            <div class="footer-social">
+                <a href="#" class="social-link"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+                <a href="#" class="social-link"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a>
+            </div>
+        </div>
+        <div class="footer-links"><h4>Quick Links</h4><a th:href="@{/}">Home</a><a th:href="@{/bookings}">Book a Trip</a><a th:href="@{/about}">About</a><a th:href="@{/contact}">Contact</a></div>
+        <div class="footer-links"><h4>Account</h4><a th:href="@{/register}">Register</a><a th:href="@{/login}">Login</a><a th:href="@{/dashboard}">My Bookings</a></div>
+        <div class="footer-contact"><h4>Contact Us</h4><p>📞 +27 XX XXX XXXX</p><p>✉️ info@ajtransportation.co.za</p><p>📍 South Africa</p></div>
+    </div>
+    <div class="footer-bottom"><p>© 2026 AJ Transportation. All rights reserved.</p></div>
+</footer>
+
+<script th:src="@{/js/main.js}"></script>
+</body>
+</html>
