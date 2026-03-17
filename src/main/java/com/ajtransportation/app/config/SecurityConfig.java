@@ -40,7 +40,7 @@ public class SecurityConfig {
                 // Public pages
                 .requestMatchers("/", "/about", "/contact", "/bookings").permitAll()
                 // Auth pages
-                .requestMatchers("/login", "/register").permitAll()
+                .requestMatchers("/login", "/register", "/dev/hashgen").permitAll()
                 // Admin-only pages (Phase 7)
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 // Everything else requires login
