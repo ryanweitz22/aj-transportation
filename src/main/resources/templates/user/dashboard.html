@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Dashboard | AJ Transportation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+    <div class="nav-container">
+        <a href="/" class="nav-logo">
+            <div class="logo-aj">AJ</div>
+            <span class="logo-text">Transportation</span>
+        </a>
+        <div class="nav-links">
+            <a th:href="@{/}">Home</a>
+            <a th:href="@{/bookings}">Bookings</a>
+            <a th:href="@{/about}">About</a>
+            <a th:href="@{/contact}">Contact</a>
+        </div>
+        <div class="nav-actions">
+            <span class="nav-user" th:text="${user.username}"></span>
+            <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
+            <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
+        </div>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
+    <div class="nav-mobile" id="mobileMenu">
+        <a th:href="@{/}">Home</a>
+        <a th:href="@{/bookings}">Bookings</a>
+        <a th:href="@{/about}">About</a>
+        <a th:href="@{/contact}">Contact</a>
+        <a th:href="@{/logout}">Logout</a>
+    </div>
+</nav>
+
+<!-- DASHBOARD BODY -->
+<div style="padding-top: var(--nav-h); min-height: 100vh; background: var(--bg);">
+
+    <!-- PAGE HEADER -->
+    <div style="background: white; border-bottom: 1px solid var(--border); padding: 32px 24px;">
+        <div style="max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <h1 style="font-size: 1.6rem; margin-bottom: 4px;">
+                    Welcome back, <span th:text="${user.username}" style="color: var(--primary);"></span> 👋
+                </h1>
+                <p style="color: var(--text-muted); font-size: 0.9rem;" th:text="${user.email}"></p>
+            </div>
+            <a th:href="@{/bookings}" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Book a New Trip
+            </a>
+        </div>
+    </div>
+
+    <div style="max-width: 1100px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 28px;">
+
+        <!-- SUMMARY CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+
+            <div class="stat-card">
+                <div class="stat-icon green">📅</div>
+                <div>
+                    <div class="stat-label">Total Bookings</div>
+                    <div class="stat-value">0</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon yellow">⏳</div>
+                <div>
+                    <div class="stat-label">Pending Payment</div>
+                    <div class="stat-value">0</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon blue">✅</div>
+                <div>
+                    <div class="stat-label">Confirmed Trips</div>
+                    <div class="stat-value">0</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- MY BOOKINGS TABLE -->
+        <div class="bookings-table-wrap">
+            <div class="table-header">
+                <span class="table-title">My Bookings</span>
+                <a th:href="@{/bookings}" class="btn btn-sm btn-outline">+ New Booking</a>
+            </div>
+
+            <!-- Empty state — will be replaced with real data in Phase 6 -->
+            <div style="padding: 64px 24px; text-align: center; color: var(--text-muted);">
+                <div style="font-size: 3rem; margin-bottom: 16px;">🗓️</div>
+                <h3 style="margin-bottom: 8px; color: var(--text-dark);">No bookings yet</h3>
+                <p style="margin-bottom: 24px; font-size: 0.9rem;">You haven't booked any trips yet. Browse available slots and book your first ride!</p>
+                <a th:href="@{/bookings}" class="btn btn-primary">View Available Trips</a>
+            </div>
+
+        </div>
+
+        <!-- ACCOUNT DETAILS -->
+        <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;">
+            <div class="table-header">
+                <span class="table-title">Account Details</span>
+            </div>
+            <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+                    <div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">Username</div>
+                        <div style="font-weight: 600;" th:text="${user.username}"></div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+                    <div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">Email Address</div>
+                        <div style="font-weight: 600;" th:text="${user.email}"></div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">Account Type</div>
+                        <div>
+                            <span class="badge badge-success" th:if="${user.role == 'USER'}">
+                                <span class="badge-dot"></span> Customer
+                            </span>
+                            <span class="badge badge-info" th:if="${user.role == 'ADMIN'}">
+                                <span class="badge-dot"></span> Admin
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-brand">
+            <div class="footer-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></div>
+            <p>Reliable transport services tailored to your schedule.</p>
+        </div>
+        <div class="footer-links"><h4>Quick Links</h4><a th:href="@{/}">Home</a><a th:href="@{/bookings}">Book a Trip</a><a th:href="@{/about}">About</a><a th:href="@{/contact}">Contact</a></div>
+        <div class="footer-links"><h4>Account</h4><a th:href="@{/dashboard}">My Dashboard</a><a th:href="@{/logout}">Logout</a></div>
+        <div class="footer-contact"><h4>Contact Us</h4><p>📞 +27 XX XXX XXXX</p><p>✉️ info@ajtransportation.co.za</p></div>
+    </div>
+    <div class="footer-bottom"><p>© 2026 AJ Transportation. All rights reserved.</p></div>
+</footer>
+
+<script th:src="@{/js/main.js}"></script>
+</body>
+</html>
