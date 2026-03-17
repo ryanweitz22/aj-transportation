@@ -84,11 +84,4 @@ public class AuthController {
         // Bookings will be added in Phase 6
         return "user/dashboard";
     }
-    @GetMapping("/dev/hashgen")
-    public void generateHash(jakarta.servlet.http.HttpServletResponse response,
-                          org.springframework.security.crypto.password.PasswordEncoder encoder)
-        throws Exception {
-    String hash = encoder.encode("Admin@1234");
-    response.getWriter().write(hash);
-}
 }
