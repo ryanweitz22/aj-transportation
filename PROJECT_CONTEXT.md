@@ -44,6 +44,8 @@
 
 > ⚠️ Do NOT suggest changing the tech stack under any circumstances.
 
+---
+
 ## 🚨 Critical Notes for Claude
 
 1. Spring Boot version is **4.0.3** — always use `jakarta.*` not `javax.*` imports
@@ -63,55 +65,39 @@
 
 ---
 
-## 🆕 New Features to Build (Extracted from Owner Brief)
+## 🆕 Key Features to Build
 
 ### 1. 💰 Price-Per-Km Algorithm
-- Build an algorithm that calculates trip price based on:
-  - Distance in km (from Google Maps Distance Matrix API)
-  - Uncle Ajmal's rate per km (set by admin in dashboard)
-  - Any markup or minimum fare he wants to apply
-- Admin sets the rate/km via a simple input field in the admin dashboard
-- Price is calculated automatically when a trip is created or when a user enters pickup/dropoff
-- Price shown to user before they confirm booking
+- Admin sets rate/km via dashboard input field
+- Price calculated automatically from Google Maps distance
+- Price shown to user before confirming booking
+- Minimum fare applies regardless of distance
 
 ### 2. 🗺️ Google Maps Integration
-- Use **Google Maps Distance Matrix API** to calculate:
-  - Distance between pickup and dropoff points
-  - Estimated travel time
-- Use estimated time + **15-minute automatic buffer** for slot duration
-  - e.g. Google says 35 min → system allocates 50 min for that slot
-- "Next available trip" shown to user is calculated using this buffered time
-- Google Maps API key will be stored in `application-local.properties` (never committed)
+- Google Maps Distance Matrix API for distance + ETA
+- Estimated time + **15-minute buffer** = slot duration
+- API key stored in `application-local.properties` (never committed)
 
 ### 3. ⏱️ 15-Minute Buffer System
-- Every trip slot automatically gets Google Maps ETA + 15 minutes added
-- This prevents double-bookings due to traffic, stops, or delays
-- Buffer is automatic — admin does not need to set it manually
-- Admin can override the buffer on a per-trip basis if needed (future feature)
+- Every trip: Google Maps ETA + 15 minutes auto-added
+- Prevents double-bookings from traffic/delays
+- Admin can override per-trip if needed (future feature)
 
-### 4. 🚫 Admin Slot Blocking (Owner-Only Interface)
-- Admin has a dedicated interface (separate from customer view) to:
-  - **Block** any time slot as "Busy" (breaks, personal, religious reasons)
-  - **Unblock** any slot back to "Available"
-  - Block entire days (e.g. Fridays for Jumu'ah prayers, sick days, public holidays)
-  - This is a simple button toggle — no complex form needed
-- Blocked slots appear as grey/unavailable on the customer calendar
-- Customers cannot see the reason for a block — just that it's unavailable
+### 4. 🚫 Admin Slot Blocking
+- Admin blocks/unblocks slots with a simple toggle
+- Block entire days (Fridays, sick days, public holidays)
+- Blocked slots show as unavailable on customer calendar
+- Customers cannot see the reason for a block
 
 ### 5. 📸 Branding Assets (Pending from Owner)
-- Uncle Ajmal still needs to provide:
-  - [ ] Company logo
-  - [ ] A few photos of himself (for About page / trust-building)
-  - [ ] A few photos of clients / trips (for homepage hero or gallery)
-  - [ ] Exact rate per km he wants to charge
-- These will be added once received — placeholders used in the meantime
+- [ ] Company logo
+- [ ] Photos of Uncle Ajmal
+- [ ] Photos of clients / trips
+- [ ] Exact rate per km (e.g. R8.50/km)
+- [ ] Minimum fare amount
 
 ### 6. 💳 Ozow Payment Account Linking
-- Ozow integration is already planned (Phase 8)
-- Uncle Ajmal's actual Ozow merchant account will only be linked once:
-  - Security hardening (Phase 10) is complete
-  - App has been tested end-to-end
-  - Team confirms the app is secure
+- Only linked after Phase 11 security hardening is complete
 
 ---
 
@@ -124,14 +110,12 @@
 
 ### Phase 2 — Spring Boot Project: ✅ COMPLETE
 - Project generated (Spring Boot 4.0.3, Java 21, Maven)
-- All 8 dependencies added
+- All dependencies added
 - Full folder structure created
 - Supabase database connected (`HikariPool-1 - Start completed`)
 - README.md and PROJECT_CONTEXT.md created
 
 ### Phase 3 — Frontend Pages: ✅ COMPLETE
-
-**Files created:**
 
 | File | Location |
 |---|---|
@@ -147,27 +131,54 @@
 | `SecurityConfig.java` | `src/main/java/com/ajtransportation/app/config/` |
 | `PageController.java` | `src/main/java/com/ajtransportation/app/controller/` |
 
-**Pages built:**
-- ✅ Homepage (`/`) — hero, features, how-it-works, CTA, footer
-- ✅ Bookings (`/bookings`) — weekly slot calendar with navigation
-- ✅ About (`/about`) — company info, values, social media links
-- ✅ Contact (`/contact`) — contact form, details, social links
+### Phase 4 — Database Tables + Java Models: ✅ COMPLETE
 
-**Calendar features (frontend only — dummy data):**
-- Weekly grid Mon–Sun, hourly slots 06:00–19:00
-- Green = available, Red = booked, Yellow = pending
-- Week navigation (prev/next + today button)
-- Month/Year jump dropdown
-- Booking modal popup with trip details and price
-- Upcoming trips list below calendar
+**Supabase tables created:**
+- `users` — email, username, bcrypt password, role (USER/ADMIN)
+- `trips` — date, times, addresses, Google Maps fields, fee, status, label
+- `bookings` — links user → trip, tracks status + payment_status
+- `payments` — links booking → Ozow reference, amount, status
+- `pricing_config` — single-row table: rate_per_km + minimum_fare
 
-**Security/routing:**
-- `SecurityConfig.java` — `permitAll()` + CSRF disabled for development
-- `PageController.java` — maps all public URLs to templates
-- App runs at `http://localhost:8080` without login
+**Java model classes created (`model/`):**
+- `User.java`
+- `Trip.java`
+- `Booking.java`
+- `Payment.java`
+- `PricingConfig.java`
 
-### Phase 4 — Database Tables + Java Models: 🔄 UP NEXT
-### Phase 5 — User Registration & Login: ⬜ TODO
+**Repository interfaces created (`repository/`):**
+- `UserRepository.java` — findByEmail, findByUsername, existsByEmail, existsByUsername
+- `TripRepository.java` — findByDate, findByDateBetween, findByDateBetweenAndStatus
+- `BookingRepository.java` — findByUser, findByUserOrderByCreatedAtDesc, existsByTripIdAndStatusNot
+- `PaymentRepository.java` — findByOzowReference, findByBookingId
+- `PricingConfigRepository.java` — use findById(1) for single config row
+
+### Phase 5 — User Registration & Login: ✅ COMPLETE
+
+**Files created:**
+
+| File | Location |
+|---|---|
+| `AuthController.java` | `src/main/java/com/ajtransportation/app/controller/` |
+| `UserService.java` | `src/main/java/com/ajtransportation/app/service/` |
+| `CustomUserDetailsService.java` | `src/main/java/com/ajtransportation/app/service/` |
+| `RegisterRequest.java` | `src/main/java/com/ajtransportation/app/model/` |
+| `SecurityConfig.java` | `src/main/java/com/ajtransportation/app/config/` (updated) |
+| `login.html` | `src/main/resources/templates/auth/` |
+| `register.html` | `src/main/resources/templates/auth/` |
+| `dashboard.html` | `src/main/resources/templates/user/` |
+
+**What works after Phase 5:**
+- `/register` — form with email, username, password, confirm password
+- `/login` — Spring Security form login with email + password
+- `/dashboard` — logged-in users see their bookings (empty for now)
+- `/logout` — clears session, redirects to homepage
+- Passwords stored as BCrypt hashes (never plain text)
+- Duplicate email/username validation on registration
+- Role-based access: USER vs ADMIN routes protected
+- Navbar shows correct buttons based on login state
+
 ### Phase 6 — Booking Calendar Backend: ⬜ TODO
 ### Phase 7 — Admin Dashboard + Slot Blocking: ⬜ TODO
 ### Phase 8 — Google Maps + Price-Per-Km Algorithm: ⬜ TODO
@@ -186,12 +197,26 @@ aj-transportation/
 │
 ├── src/main/java/com/ajtransportation/app/
 │   ├── config/
-│   │   └── SecurityConfig.java          ✅ permitAll for dev
+│   │   └── SecurityConfig.java          ✅ Updated for Phase 5 — login/register routes
 │   ├── controller/
-│   │   └── PageController.java          ✅ maps / /about /contact /bookings
-│   ├── model/                           ⬜ Empty — Phase 4
-│   ├── repository/                      ⬜ Empty — Phase 4
-│   ├── service/                         ⬜ Empty — Phase 5
+│   │   ├── PageController.java          ✅ Maps / /about /contact /bookings
+│   │   └── AuthController.java          ✅ Handles /register POST, /dashboard GET
+│   ├── model/
+│   │   ├── User.java                    ✅ Phase 4
+│   │   ├── Trip.java                    ✅ Phase 4
+│   │   ├── Booking.java                 ✅ Phase 4
+│   │   ├── Payment.java                 ✅ Phase 4
+│   │   ├── PricingConfig.java           ✅ Phase 4
+│   │   └── RegisterRequest.java         ✅ Phase 5 — form validation DTO
+│   ├── repository/
+│   │   ├── UserRepository.java          ✅ Phase 4
+│   │   ├── TripRepository.java          ✅ Phase 4
+│   │   ├── BookingRepository.java       ✅ Phase 4
+│   │   ├── PaymentRepository.java       ✅ Phase 4
+│   │   └── PricingConfigRepository.java ✅ Phase 4
+│   ├── service/
+│   │   ├── UserService.java             ✅ Phase 5 — register logic, BCrypt
+│   │   └── CustomUserDetailsService.java ✅ Phase 5 — Spring Security login
 │   └── AppApplication.java              ✅ Working
 │
 ├── src/main/resources/
@@ -199,9 +224,12 @@ aj-transportation/
 │   │   ├── index.html                   ✅ Homepage
 │   │   ├── about.html                   ✅ About page
 │   │   ├── contact.html                 ✅ Contact page
-│   │   ├── auth/                        ⬜ Phase 5 (login.html, register.html)
+│   │   ├── auth/
+│   │   │   ├── login.html               ✅ Phase 5
+│   │   │   └── register.html            ✅ Phase 5
 │   │   ├── user/
-│   │   │   └── bookings.html            ✅ Booking calendar
+│   │   │   ├── bookings.html            ✅ Booking calendar (frontend only)
+│   │   │   └── dashboard.html           ✅ Phase 5 — user dashboard
 │   │   ├── admin/                       ⬜ Phase 7
 │   │   └── layout/
 │   │       └── base.html                ✅ Shared layout
@@ -212,7 +240,7 @@ aj-transportation/
 │   │   ├── js/
 │   │   │   ├── main.js                  ✅ Navbar + animations
 │   │   │   └── calendar.js              ✅ Weekly calendar logic
-│   │   └── images/                      ⬜ Awaiting logo + photos from Uncle Ajmal
+│   │   └── images/                      ⬜ Awaiting assets from Uncle Ajmal
 │   ├── application.properties           ✅ Committed to GitHub
 │   └── application-local.properties     ✅ Local only — GITIGNORED
 │
@@ -230,6 +258,7 @@ spring.application.name=aj-transportation
 spring.config.import=optional:classpath:application-local.properties
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.properties.hibernate.format_sql=true
 spring.thymeleaf.cache=false
 spring.thymeleaf.prefix=classpath:/templates/
@@ -241,6 +270,8 @@ spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
 spring.jpa.open-in-view=false
 ```
+
+---
 
 ## ⚙️ application-local.properties template (GITIGNORED)
 
@@ -278,12 +309,12 @@ postgresql (runtime)
 
 ---
 
-## 🗄️ Planned Database Tables (NOT YET BUILT — Phase 4)
+## 🗄️ Database Tables (Created in Supabase — Phase 4)
 
 ### `users`
 | Column | Type | Notes |
 |---|---|---|
-| id | UUID | Primary key |
+| id | UUID | Primary key, auto-generated |
 | email | VARCHAR | Unique, used for login |
 | username | VARCHAR | Display name |
 | password | VARCHAR | BCrypt hashed — NEVER plain text |
@@ -331,7 +362,7 @@ postgresql (runtime)
 ### `pricing_config`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT | Primary key (single row) |
+| id | INT | Primary key (always = 1, single row) |
 | rate_per_km | DECIMAL | Set by admin e.g. R8.50/km |
 | minimum_fare | DECIMAL | Minimum charge regardless of distance |
 | updated_at | TIMESTAMP | Last updated |
@@ -346,9 +377,10 @@ postgresql (runtime)
 | `/about` | ✅ Built | ❌ Public |
 | `/contact` | ✅ Built | ❌ Public |
 | `/bookings` | ✅ Built (frontend only) | ❌ Public |
-| `/login` | ⬜ Phase 5 | ❌ Public |
-| `/register` | ⬜ Phase 5 | ❌ Public |
-| `/dashboard` | ⬜ Phase 5 | ✅ Logged in |
+| `/login` | ✅ Phase 5 | ❌ Public |
+| `/register` | ✅ Phase 5 | ❌ Public |
+| `/dashboard` | ✅ Phase 5 | ✅ Logged in |
+| `/logout` | ✅ Phase 5 | ✅ Logged in |
 | `/admin/dashboard` | ⬜ Phase 7 | ✅ ADMIN only |
 | `/admin/trips` | ⬜ Phase 7 | ✅ ADMIN only |
 | `/admin/slots/block` | ⬜ Phase 7 | ✅ ADMIN only |
@@ -357,39 +389,73 @@ postgresql (runtime)
 
 ---
 
-## 🔐 Current SecurityConfig.java (Dev Mode)
+## 🔐 SecurityConfig.java (Phase 5 — Updated)
 
 ```java
 package com.ajtransportation.app.config;
 
+import com.ajtransportation.app.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final CustomUserDetailsService userDetailsService;
+
+    public SecurityConfig(CustomUserDetailsService userDetailsService) {
+        this.userDetailsService = userDetailsService;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                .anyRequest().permitAll()
+                .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
+                .requestMatchers("/", "/about", "/contact", "/bookings").permitAll()
+                .requestMatchers("/login", "/register").permitAll()
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/dashboard").authenticated()
+                .anyRequest().authenticated()
             )
-            .csrf(csrf -> csrf.disable())
-            .formLogin(form -> form.disable())
-            .logout(logout -> logout
-                .logoutSuccessUrl("/")
+            .formLogin(form -> form
+                .loginPage("/login")
+                .loginProcessingUrl("/login")
+                .defaultSuccessUrl("/dashboard", true)
+                .failureUrl("/login?error=true")
                 .permitAll()
-            );
+            )
+            .logout(logout -> logout
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/?logout=true")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
+                .permitAll()
+            )
+            .userDetailsService(userDetailsService);
+
         return http.build();
     }
 }
 ```
-
-> ⚠️ Intentionally open for development. Lock down in Phase 11.
 
 ---
 
@@ -453,27 +519,25 @@ public class PageController {
 
 ---
 
-## 📌 What To Do Next — Phase 4
+## 📌 What To Do Next — Phase 6
 
-**Goal:** Create database tables in Supabase and matching Java model classes.
+**Goal:** Connect the booking calendar to real database data.
 
-**Step 1 — Supabase SQL Editor:**
-Create tables: `users`, `trips`, `bookings`, `payments`, `pricing_config`
+**Step 1 — TripService.java:**
+- `getTripsForWeek(LocalDate weekStart)` — fetch trips from DB for a 7-day range
+- `getTripById(UUID id)` — fetch a single trip
 
-**Step 2 — Java model classes in `model/` folder:**
-- `User.java`
-- `Trip.java` (includes distance_km, google_eta_minutes, buffered_duration_minutes)
-- `Booking.java`
-- `Payment.java`
-- `PricingConfig.java`
+**Step 2 — BookingService.java:**
+- `createBooking(User user, UUID tripId)` — create booking + mark trip as BOOKED
+- `getUserBookings(User user)` — get all bookings for a user
 
-**Step 3 — Repository interfaces in `repository/` folder:**
-- `UserRepository.java`
-- `TripRepository.java`
-- `BookingRepository.java`
-- `PaymentRepository.java`
-- `PricingConfigRepository.java`
+**Step 3 — Update BookingsController.java:**
+- GET `/bookings` — pass real trip data to Thymeleaf template via model
+- POST `/bookings/book` — receive tripId, create booking, redirect to payment
 
-**Step 4 — Restart app and confirm tables appear in Supabase Table Editor**
+**Step 4 — Update `bookings.html`:**
+- Replace JavaScript dummy data with Thymeleaf `th:each` loop over real trips
+- Pass trips as JSON to `calendar.js` for rendering
 
-**Step 5 — Move to Phase 5: Login, register pages and AuthController**
+**Step 5 — Update `dashboard.html`:**
+- Show user's real bookings from DB in the upcoming trips list
