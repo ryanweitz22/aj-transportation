@@ -3,9 +3,7 @@ package com.ajtransportation.app.controller;
 import com.ajtransportation.app.model.Booking;
 import com.ajtransportation.app.model.Trip;
 import com.ajtransportation.app.model.User;
-import com.ajtransportation.app.service.BookingService;
-import com.ajtransportation.app.service.TripService;
-import com.ajtransportation.app.service.UserService;
+import com.ajtransportation.app.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -16,10 +14,12 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Controller
@@ -28,94 +28,132 @@ public class BookingsController {
     private final TripService tripService;
     private final BookingService bookingService;
     private final UserService userService;
+    private final TripRequestService tripRequestService;
+    private final BusinessHoursService businessHoursService;
 
-    public BookingsController(TripService tripService,
-                               BookingService bookingService,
-                               UserService userService) {
+    public BookingsController(TripService tripService, BookingService bookingService,
+                               UserService userService, TripRequestService tripRequestService,
+                               BusinessHoursService businessHoursService) {
         this.tripService = tripService;
         this.bookingService = bookingService;
         this.userService = userService;
+        this.tripRequestService = tripRequestService;
+        this.businessHoursService = businessHoursService;
     }
 
-    // GET /bookings?week=2026-03-16
-    // Shows the booking calendar. Defaults to the current week.
-    // Logged-in users see a Book button; guests see a "Login to book" prompt.
     @GetMapping("/bookings")
     public String bookingsPage(
             @RequestParam(value = "week", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate week,
             Model model) throws JsonProcessingException {
 
-        // Default to the current Monday if no week param provided
-        if (week == null) {
-            week = LocalDate.now().with(DayOfWeek.MONDAY);
-        }
+        if (week == null) week = LocalDate.now().with(DayOfWeek.MONDAY);
 
-        // Users only see AVAILABLE and BOOKED slots — BLOCKED slots are hidden
+        LocalDate minWeek = LocalDate.now().with(DayOfWeek.MONDAY);
+        LocalDate maxWeek = businessHoursService.maxBookingDate().with(DayOfWeek.MONDAY);
+        if (week.isBefore(minWeek)) week = minWeek;
+        if (week.isAfter(maxWeek))  week = maxWeek;
+
         List<Trip> trips = tripService.getVisibleTripsForWeek(week);
 
-        // Serialize trips to JSON so calendar.js can consume them directly
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         String tripsJson = mapper.writeValueAsString(trips);
+        String businessHoursJson = buildBusinessHoursJson(week, mapper);
 
-        model.addAttribute("tripsJson", tripsJson);
-        model.addAttribute("weekStart", week);
-        model.addAttribute("weekEnd", week.plusDays(6));
-
-        // Navigation: previous and next week
-        model.addAttribute("prevWeek", week.minusWeeks(1));
-        model.addAttribute("nextWeek", week.plusWeeks(1));
-
-        // Limit how far into the future users can browse (1 year)
-        model.addAttribute("maxWeek", LocalDate.now().plusYears(1).with(DayOfWeek.MONDAY));
-
+        model.addAttribute("tripsJson",         tripsJson);
+        model.addAttribute("businessHoursJson", businessHoursJson);
+        model.addAttribute("weekStart",  week);
+        model.addAttribute("weekEnd",    week.plusDays(6));
+        model.addAttribute("prevWeek",   week.minusWeeks(1));
+        model.addAttribute("nextWeek",   week.plusWeeks(1));
+        model.addAttribute("minWeek",    minWeek);
+        model.addAttribute("maxWeek",    maxWeek);
         return "user/bookings";
     }
 
-    // POST /bookings/book
-    // Authenticated users submit tripId to make a booking
     @PostMapping("/bookings/book")
-    public String bookTrip(
-            @RequestParam("tripId") UUID tripId,
-            @AuthenticationPrincipal UserDetails userDetails,
-            RedirectAttributes redirectAttributes) {
-
+    public String bookTrip(@RequestParam("tripId") UUID tripId,
+                           @AuthenticationPrincipal UserDetails userDetails,
+                           RedirectAttributes ra) {
         User user = userService.findByEmail(userDetails.getUsername());
-
         try {
             Booking booking = bookingService.createBooking(user, tripId);
-            // Phase 9 will redirect to Ozow payment here instead
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Booking confirmed! Booking ID: " + booking.getId());
+            ra.addFlashAttribute("successMessage",
+                "Booking confirmed! Ref: " + booking.getId().toString().substring(0,8).toUpperCase());
             return "redirect:/dashboard";
-
         } catch (RuntimeException e) {
-            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+            ra.addFlashAttribute("errorMessage", e.getMessage());
             return "redirect:/bookings";
         }
     }
 
-    // POST /bookings/cancel/{id}
-    // Logged-in users can cancel their own bookings
-    @PostMapping("/bookings/cancel/{id}")
-    public String cancelBooking(
-            @PathVariable UUID id,
+    @PostMapping("/bookings/request")
+    public String requestTrip(
+            @RequestParam("requestedDate")      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate requestedDate,
+            @RequestParam("requestedStartTime") String requestedStartTime,
+            @RequestParam("pickupAddress")      String pickupAddress,
+            @RequestParam("dropoffAddress")     String dropoffAddress,
+            @RequestParam(value = "additionalNotes", required = false) String additionalNotes,
             @AuthenticationPrincipal UserDetails userDetails,
-            RedirectAttributes redirectAttributes) {
+            RedirectAttributes ra) {
 
         User user = userService.findByEmail(userDetails.getUsername());
-        Booking booking = bookingService.getBookingById(id);
 
-        // Security check — users can only cancel their own bookings
-        if (!booking.getUser().getId().equals(user.getId())) {
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "You are not authorised to cancel this booking.");
-            return "redirect:/dashboard";
+        if (requestedDate.isBefore(businessHoursService.minBookingDate())) {
+            ra.addFlashAttribute("errorMessage", "Cannot request a trip in the past.");
+            return "redirect:/bookings";
+        }
+        if (requestedDate.isAfter(businessHoursService.maxBookingDate())) {
+            ra.addFlashAttribute("errorMessage", "Cannot book more than 1 year in advance.");
+            return "redirect:/bookings";
         }
 
-        bookingService.cancelBooking(id);
-        redirectAttributes.addFlashAttribute("successMessage", "Booking cancelled successfully.");
+        LocalTime startTime;
+        try { startTime = LocalTime.parse(requestedStartTime); }
+        catch (Exception e) { ra.addFlashAttribute("errorMessage", "Invalid time."); return "redirect:/bookings"; }
+
+        if (!businessHoursService.isWithinBusinessHours(requestedDate, startTime)) {
+            ra.addFlashAttribute("errorMessage", "That time is outside our business hours.");
+            return "redirect:/bookings";
+        }
+
+        try {
+            tripRequestService.createRequest(user, requestedDate, startTime, pickupAddress, dropoffAddress, additionalNotes);
+            ra.addFlashAttribute("successMessage",
+                "Trip request submitted! We will confirm via email.");
+        } catch (RuntimeException e) {
+            ra.addFlashAttribute("errorMessage", e.getMessage());
+        }
         return "redirect:/dashboard";
+    }
+
+    @PostMapping("/bookings/cancel/{id}")
+    public String cancelBooking(@PathVariable UUID id,
+                                @AuthenticationPrincipal UserDetails userDetails,
+                                RedirectAttributes ra) {
+        User user = userService.findByEmail(userDetails.getUsername());
+        Booking booking = bookingService.getBookingById(id);
+        if (!booking.getUser().getId().equals(user.getId())) {
+            ra.addFlashAttribute("errorMessage", "Not authorised to cancel this booking.");
+            return "redirect:/dashboard";
+        }
+        bookingService.cancelBooking(id);
+        ra.addFlashAttribute("successMessage", "Booking cancelled.");
+        return "redirect:/dashboard";
+    }
+
+    private String buildBusinessHoursJson(LocalDate weekStart, ObjectMapper mapper) throws JsonProcessingException {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < 7; i++) {
+            LocalDate day = weekStart.plusDays(i);
+            Map<String, String> hours = new LinkedHashMap<>();
+            LocalTime open  = businessHoursService.openTime(day);
+            LocalTime close = businessHoursService.closeTime(day);
+            hours.put("open",  open  != null ? open.toString()  : null);
+            hours.put("close", close != null ? close.toString() : null);
+            map.put(day.toString(), hours);
+        }
+        return mapper.writeValueAsString(map);
     }
 }

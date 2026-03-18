@@ -24,9 +24,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+    public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
@@ -37,15 +35,10 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                // Static resources always public
                 .requestMatchers("/css/**", "/js/**", "/images/**", "/fonts/**").permitAll()
-                // Public pages
                 .requestMatchers("/", "/about", "/contact", "/bookings").permitAll()
-                // Auth pages
-                .requestMatchers("/login", "/register").permitAll()
-                // Admin-only pages (Phase 7)
+                .requestMatchers("/login", "/register", "/verify-email").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
-                // Everything else requires login
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
