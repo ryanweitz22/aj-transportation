@@ -15,7 +15,7 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     List<Trip> findByDateBetween(LocalDate startDate, LocalDate endDate);
 
     // Only available trips between two dates
-    List<Trip> findByDateBetweenAndStatus(LocalDate startDate, LocalDate endDate, String status);
+    List<Trip> findByDateBetweenAndStatusNot(LocalDate startDate, LocalDate endDate, String status);
 
     // All trips with a specific status
     List<Trip> findByStatus(String status);

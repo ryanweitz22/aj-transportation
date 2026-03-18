@@ -13,14 +13,19 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import com.ajtransportation.app.model.Booking;
+import com.ajtransportation.app.service.BookingService;
+import java.util.List;
 
 @Controller
 public class AuthController {
 
     private final UserService userService;
+    private final BookingService bookingService;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, BookingService bookingService) {
         this.userService = userService;
+        this.bookingService = bookingService;
     }
 
     // ---- LOGIN ----
@@ -29,6 +34,7 @@ public class AuthController {
     public String loginPage(
             @RequestParam(value = "error", required = false) String error,
             @RequestParam(value = "logout", required = false) String logout,
+            @RequestParam(value = "registered", required = false) String registered,
             Model model) {
 
         if (error != null) {
@@ -36,6 +42,9 @@ public class AuthController {
         }
         if (logout != null) {
             model.addAttribute("successMessage", "You have been logged out successfully.");
+        }
+        if (registered != null) {
+            model.addAttribute("successMessage", "Account created! Please log in.");
         }
         return "auth/login";
     }
@@ -77,11 +86,15 @@ public class AuthController {
             @AuthenticationPrincipal UserDetails userDetails,
             Model model) {
 
-        // Look up full user object so we can show their username etc.
         User user = userService.findByEmail(userDetails.getUsername());
-        model.addAttribute("user", user);
+        List<Booking> bookings = bookingService.getUserBookings(user);
+        long activeBookingCount = bookingService.countActiveBookings(user);
 
-        // Bookings will be added in Phase 6
+        model.addAttribute("user", user);
+        model.addAttribute("bookings", bookings);
+        model.addAttribute("activeBookingCount", activeBookingCount);
+        model.addAttribute("totalBookingCount", bookings.size());
+
         return "user/dashboard";
     }
 }
