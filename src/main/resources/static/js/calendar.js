@@ -30,10 +30,12 @@ document.addEventListener('DOMContentLoaded', function () {
     renderCalendar(trips, currentWeekStart);
     updateNavButtons();
 
-    // Close modal on backdrop click
-    const backdrop = document.getElementById('modal-backdrop');
-    if (backdrop) {
-        backdrop.addEventListener('click', closeBookingModal);
+    // Close modal when clicking outside the box
+    const modal = document.getElementById('booking-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeBookingModal();
+        });
     }
 
     // Close modal on Escape key
@@ -343,16 +345,13 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     if (input) input.value = tripId;
 
     // Show modal
-    modal.classList.remove('hidden');
-    if (backdrop) backdrop.classList.remove('hidden');
+    modal.classList.add('open');
     document.body.style.overflow = 'hidden';
 }
 
 function closeBookingModal() {
-    const modal    = document.getElementById('booking-modal');
-    const backdrop = document.getElementById('modal-backdrop');
-    if (modal)    modal.classList.add('hidden');
-    if (backdrop) backdrop.classList.add('hidden');
+    const modal = document.getElementById('booking-modal');
+    if (modal) modal.classList.remove('open');
     document.body.style.overflow = '';
 }
 
