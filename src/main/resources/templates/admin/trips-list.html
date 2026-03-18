@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/springsecurity6"
+      th:replace="~{layout/base :: layout(~{::title}, ~{::main})}">
+
+<title>All Trip Slots — Admin</title>
+
+<main>
+  <div class="admin-page">
+    <div class="admin-header">
+      <h1 class="admin-title">Trip Slots</h1>
+      <a href="/admin/trips/new" class="btn btn-primary">+ Create New Slot</a>
+    </div>
+
+    <!-- Success / Error messages -->
+    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+
+    <!-- Empty state -->
+    <div th:if="${#lists.isEmpty(trips)}" class="empty-state">
+      <p>No trip slots found for this week. <a href="/admin/trips/new">Create one now →</a></p>
+    </div>
+
+    <!-- Trips table -->
+    <div th:unless="${#lists.isEmpty(trips)}" class="admin-card">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Label / Route</th>
+            <th>Fee</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="trip : ${trips}"
+              th:classappend="${trip.status == 'BLOCKED'} ? 'row-blocked' :
+                              (${trip.status == 'BOOKED'} ? 'row-booked' : '')">
+
+            <td th:text="${#temporals.format(trip.date, 'EEE dd MMM yyyy')}"></td>
+            <td th:text="${#temporals.format(trip.startTime, 'HH:mm')}"></td>
+            <td th:text="${#temporals.format(trip.endTime, 'HH:mm')}"></td>
+            <td th:text="${trip.label}"></td>
+            <td th:text="${trip.fee != null ? 'R' + trip.fee : '—'}"></td>
+
+            <!-- Status badge -->
+            <td>
+              <span class="status-badge"
+                    th:classappend="${trip.status == 'AVAILABLE'} ? 'badge-available' :
+                                    (${trip.status == 'BOOKED'} ? 'badge-booked' : 'badge-blocked')"
+                    th:text="${trip.status}">
+              </span>
+            </td>
+
+            <!-- Action buttons -->
+            <td class="action-cell">
+
+              <!-- Block button (only for AVAILABLE slots) -->
+              <form th:if="${trip.status == 'AVAILABLE'}"
+                    th:action="@{/admin/trips/block/{id}(id=${trip.id})}"
+                    method="post" style="display:inline;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                <input type="hidden" name="reason" value="Blocked by admin" />
+                <button type="submit" class="btn btn-sm btn-warning"
+                        onclick="return confirm('Block this slot?')">Block</button>
+              </form>
+
+              <!-- Unblock button (only for BLOCKED slots) -->
+              <form th:if="${trip.status == 'BLOCKED'}"
+                    th:action="@{/admin/trips/unblock/{id}(id=${trip.id})}"
+                    method="post" style="display:inline;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                <button type="submit" class="btn btn-sm btn-success">Unblock</button>
+              </form>
+
+              <!-- Delete button (only for AVAILABLE or BLOCKED — not BOOKED) -->
+              <form th:if="${trip.status != 'BOOKED'}"
+                    th:action="@{/admin/trips/delete/{id}(id=${trip.id})}"
+                    method="post" style="display:inline;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                <button type="submit" class="btn btn-sm btn-danger"
+                        onclick="return confirm('Delete this trip permanently? This cannot be undone.')">
+                  Delete
+                </button>
+              </form>
+
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</main>
+
+</html>

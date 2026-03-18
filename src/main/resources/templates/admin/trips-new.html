@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/springsecurity6"
+      th:replace="~{layout/base :: layout(~{::title}, ~{::main})}">
+
+<title>Create Trip Slot — Admin</title>
+
+<main>
+  <div class="admin-page">
+    <div class="admin-header">
+      <h1 class="admin-title">Create New Trip Slot</h1>
+      <a href="/admin/trips" class="btn btn-secondary">← View All Trips</a>
+    </div>
+
+    <!-- Success / Error messages -->
+    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+
+    <div class="admin-card">
+      <form action="/admin/trips/new" method="post">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+
+        <div class="form-grid">
+
+          <!-- Date -->
+          <div class="form-group">
+            <label for="date">Trip Date *</label>
+            <input type="date" id="date" name="date" required
+                   th:min="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" />
+            <small>Select the date this slot is available</small>
+          </div>
+
+          <!-- Start Time -->
+          <div class="form-group">
+            <label for="startTime">Start Time *</label>
+            <input type="time" id="startTime" name="startTime" required min="04:00" max="12:00" />
+            <small>Between 04:00 and 12:00</small>
+          </div>
+
+          <!-- End Time -->
+          <div class="form-group">
+            <label for="endTime">End Time *</label>
+            <input type="time" id="endTime" name="endTime" required min="04:00" max="23:59" />
+            <small>Google Maps ETA + 15 min buffer (Phase 8 will auto-calculate)</small>
+          </div>
+
+          <!-- Label / Route Name -->
+          <div class="form-group">
+            <label for="label">Route Label *</label>
+            <input type="text" id="label" name="label" required
+                   placeholder="e.g. Cape Town CBD → Airport" maxlength="100" />
+            <small>This is shown to customers on the calendar</small>
+          </div>
+
+          <!-- Pickup Address -->
+          <div class="form-group">
+            <label for="pickupAddress">Pickup Address</label>
+            <input type="text" id="pickupAddress" name="pickupAddress"
+                   placeholder="e.g. 12 Long Street, Cape Town" />
+            <small>Optional until Phase 8 (Google Maps integration)</small>
+          </div>
+
+          <!-- Dropoff Address -->
+          <div class="form-group">
+            <label for="dropoffAddress">Dropoff Address</label>
+            <input type="text" id="dropoffAddress" name="dropoffAddress"
+                   placeholder="e.g. Cape Town International Airport" />
+            <small>Optional until Phase 8 (Google Maps integration)</small>
+          </div>
+
+          <!-- Fee -->
+          <div class="form-group">
+            <label for="fee">Trip Fee (R)</label>
+            <input type="number" id="fee" name="fee" step="0.01" min="0"
+                   placeholder="e.g. 350.00" />
+            <small>Optional — Phase 8 will auto-calculate from distance</small>
+          </div>
+
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Create Trip Slot</button>
+          <a href="/admin/trips" class="btn btn-secondary">Cancel</a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</main>
+
+</html>
