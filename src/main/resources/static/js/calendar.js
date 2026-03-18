@@ -1,7 +1,10 @@
 /**
  * calendar.js — AJ Transportation
- * Enhanced Phase 6: Month/week navigation, smart next-available slot logic,
- * 4am–12pm window, proper available/booked visual states.
+ * Phase 6 + Phase 8 fix:
+ *  - Trip slots are fully clickable (no pointer-events issues)
+ *  - Booking modal opens correctly on click
+ *  - 4am–12pm window with correct pixel math
+ *  - Month/week navigation
  */
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -18,18 +21,25 @@ document.addEventListener('DOMContentLoaded', function () {
         trips = [];
     }
 
-    // Normalise all dates/times from arrays (Jackson serialises LocalDate/LocalTime as arrays)
     trips = trips.map(normaliseTrip);
-
-    // Store globally so month-jump can re-render
     window._allTrips = trips;
 
-    // Parse week start from server
     currentWeekStart = parseLocalDate(WEEK_START);
 
     buildMonthDropdown();
     renderCalendar(trips, currentWeekStart);
     updateNavButtons();
+
+    // Close modal on backdrop click
+    const backdrop = document.getElementById('modal-backdrop');
+    if (backdrop) {
+        backdrop.addEventListener('click', closeBookingModal);
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeBookingModal();
+    });
 });
 
 // ─── Normalise Jackson array format → strings ─────────────────────────────────
@@ -47,7 +57,7 @@ function normaliseDate(d) {
     if (Array.isArray(d)) {
         return `${d[0]}-${String(d[1]).padStart(2,'0')}-${String(d[2]).padStart(2,'0')}`;
     }
-    return d;
+    return String(d);
 }
 
 function normaliseTime(t) {
@@ -55,46 +65,44 @@ function normaliseTime(t) {
     if (Array.isArray(t)) {
         return `${String(t[0]).padStart(2,'0')}:${String(t[1]).padStart(2,'0')}`;
     }
-    // Already a string like "08:00:00" or "08:00"
-    return t.substring(0, 5);
+    return String(t).substring(0, 5);
 }
 
 // ─── Month Dropdown ───────────────────────────────────────────────────────────
 function buildMonthDropdown() {
-    const select = document.getElementById('monthSelect');
-    if (!select) return;
+    // Target whichever monthSelect exists on the page (there may be two)
+    const selects = document.querySelectorAll('#monthSelect');
+    if (!selects.length) return;
 
-    const now = new Date();
+    const now         = new Date();
     const currentYear = now.getFullYear();
-    const MONTHS = ['January','February','March','April','May','June',
-                    'July','August','September','October','November','December'];
+    const MONTHS      = ['January','February','March','April','May','June',
+                         'July','August','September','October','November','December'];
 
-    // Build Jan–Dec of the current year
-    for (let m = 0; m < 12; m++) {
-        const opt = document.createElement('option');
-        opt.value = `${currentYear}-${String(m + 1).padStart(2,'0')}-01`;
-        opt.textContent = `${MONTHS[m]} ${currentYear}`;
-        // Pre-select the month matching current week
-        if (m === currentWeekStart.getMonth() && currentYear === currentWeekStart.getFullYear()) {
-            opt.selected = true;
+    selects.forEach(select => {
+        // Clear existing options (prevent duplicates on re-render)
+        select.innerHTML = '';
+        for (let m = 0; m < 12; m++) {
+            const opt = document.createElement('option');
+            opt.value       = `${currentYear}-${String(m + 1).padStart(2,'0')}-01`;
+            opt.textContent = `${MONTHS[m]} ${currentYear}`;
+            if (m === currentWeekStart.getMonth() && currentYear === currentWeekStart.getFullYear()) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
         }
-        select.appendChild(opt);
-    }
+    });
 }
 
 function jumpToMonth(value) {
     if (!value) return;
     const d = parseLocalDate(value);
-    // Jump to the Monday of the first week of that month
     currentWeekStart = getMondayOf(d);
     navigateToWeek(currentWeekStart);
 }
 
-// Navigate by reloading the page with the correct ?week= param
-// This keeps the server in sync (it fetches trips for the requested week)
 function navigateToWeek(mondayDate) {
-    const dateStr = formatDate(mondayDate);
-    window.location.href = `/bookings?week=${dateStr}`;
+    window.location.href = `/bookings?week=${formatDate(mondayDate)}`;
 }
 
 // ─── Calendar Render ──────────────────────────────────────────────────────────
@@ -102,13 +110,13 @@ function renderCalendar(trips, weekStart) {
     const container = document.getElementById('calendar-container');
     if (!container) return;
 
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    const today     = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const dayNames  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const dayNames   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    // Build 7 day objects for this week
+    // Build 7 day objects
     const days = [];
     for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
@@ -116,9 +124,13 @@ function renderCalendar(trips, weekStart) {
         days.push(d);
     }
 
-    // Calendar window: 04:00 – 12:00 = 480 minutes
-    const CAL_START_MIN = 4 * 60;
-    const CAL_TOTAL_MIN = 8 * 60; // 480 min
+    // Calendar window: 04:00–12:00 = 480 min
+    const CAL_START_MIN = 4 * 60;   // 240
+    const CAL_TOTAL_MIN = 8 * 60;   // 480
+
+    // Row height per hour in pixels (used for accurate slot positioning)
+    const PX_PER_HOUR = 60;
+    const TOTAL_HEIGHT = PX_PER_HOUR * 8; // 480px for 04:00–12:00
 
     let html = '<div class="calendar-grid">';
 
@@ -136,94 +148,98 @@ function renderCalendar(trips, weekStart) {
     });
     html += '</div>';
 
-    // ── Body: time column + 7 day columns ──
-    html += '<div class="calendar-body">';
+    // ── Body ──
+    html += `<div class="calendar-body" style="height:${TOTAL_HEIGHT}px;">`;
 
-    // Time column labels
+    // Time labels column
     html += '<div class="time-column">';
     for (let h = 4; h <= 12; h++) {
-        html += `<div class="time-label">${String(h).padStart(2,'0')}:00</div>`;
+        html += `<div class="time-label" style="height:${PX_PER_HOUR}px;">${String(h).padStart(2,'0')}:00</div>`;
     }
     html += '</div>';
 
     // Day columns
-    days.forEach((day, i) => {
+    days.forEach((day) => {
         const dateStr  = formatDate(day);
         const isPast   = day < today;
         const dayTrips = trips
             .filter(t => t.date === dateStr)
             .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
-        html += `<div class="cal-day-column ${isPast ? 'past-col' : ''}" data-date="${dateStr}">`;
+        html += `<div class="cal-day-column ${isPast ? 'past-col' : ''}" style="height:${TOTAL_HEIGHT}px;">`;
 
         // Hour grid lines
-        for (let h = 4; h <= 12; h++) {
-            const topPct = ((h * 60 - CAL_START_MIN) / CAL_TOTAL_MIN) * 100;
-            html += `<div class="hour-line" style="top:${topPct}%"></div>`;
+        for (let h = 0; h <= 8; h++) {
+            const topPx = h * PX_PER_HOUR;
+            html += `<div class="hour-line" style="top:${topPx}px;"></div>`;
         }
 
-        // Trip slots
+        // Trip slots — rendered as clickable divs
         dayTrips.forEach(trip => {
             const startMin = timeToMinutes(trip.startTime);
             const endMin   = timeToMinutes(trip.endTime);
 
-            // Skip if completely outside 04:00–12:00 window
+            // Skip trips completely outside 04:00–12:00
             if (endMin <= CAL_START_MIN || startMin >= CAL_START_MIN + CAL_TOTAL_MIN) return;
 
             const clampedStart = Math.max(startMin, CAL_START_MIN);
             const clampedEnd   = Math.min(endMin, CAL_START_MIN + CAL_TOTAL_MIN);
 
-            const topPct    = ((clampedStart - CAL_START_MIN) / CAL_TOTAL_MIN) * 100;
-            const heightPct = Math.max(((clampedEnd - clampedStart) / CAL_TOTAL_MIN) * 100, 4);
+            const topPx    = ((clampedStart - CAL_START_MIN) / 60) * PX_PER_HOUR;
+            const heightPx = Math.max(((clampedEnd - clampedStart) / 60) * PX_PER_HOUR, 36);
 
             const isAvailable = trip.status === 'AVAILABLE' && !isPast;
+            const isBooked    = trip.status === 'BOOKED';
+
             const statusClass = isAvailable ? 'slot-available'
-                              : trip.status === 'BOOKED' ? 'slot-booked'
+                              : isBooked    ? 'slot-booked'
                               : 'slot-blocked';
 
-            const clickAttr = isAvailable
-                ? `onclick="openBookingModal('${trip.id}','${escAttr(trip.label)}','${trip.startTime}','${trip.endTime}','${trip.date}','${trip.fee ?? ''}')" role="button" tabindex="0"`
-                : '';
+            const feeText = trip.fee
+                ? `R${parseFloat(trip.fee).toFixed(2)}`
+                : 'Fee TBC';
 
-            const feeHtml = trip.fee
-                ? `<span class="slot-fee">R${parseFloat(trip.fee).toFixed(2)}</span>`
-                : '';
-            const bookedTag = trip.status === 'BOOKED'
+            const bookedTag = isBooked
                 ? '<span class="slot-status-tag">Booked</span>'
                 : '';
 
-            html += `
-                <div class="trip-slot ${statusClass}"
-                     style="top:${topPct}%;height:${heightPct}%;min-height:38px;"
-                     ${clickAttr}
-                     title="${escAttr(trip.label)}">
-                    <span class="slot-time">${trip.startTime} – ${trip.endTime}</span>
-                    <span class="slot-label">${escHtml(trip.label || '')}</span>
-                    ${feeHtml}
-                    ${bookedTag}
-                </div>`;
-        });
+            // Available slots get onclick; booked/past slots show a "not available" cursor
+            if (isAvailable) {
+                const tripData = {
+                    id:        trip.id,
+                    label:     trip.label || '',
+                    startTime: trip.startTime,
+                    endTime:   trip.endTime,
+                    date:      trip.date,
+                    fee:       trip.fee || ''
+                };
+                const dataAttr = escAttrJson(tripData);
 
-        // "Next available" hint — shown when there are booked slots on a non-past day
-        if (!isPast && dayTrips.length > 0) {
-            const lastBooked = dayTrips
-                .filter(t => t.status === 'BOOKED')
-                .sort((a, b) => timeToMinutes(b.endTime) - timeToMinutes(a.endTime))[0];
-
-            const nextAvail = dayTrips.find(t =>
-                t.status === 'AVAILABLE' &&
-                lastBooked &&
-                timeToMinutes(t.startTime) >= timeToMinutes(lastBooked.endTime)
-            );
-
-            if (lastBooked && nextAvail) {
-                const topPct = ((timeToMinutes(nextAvail.startTime) - CAL_START_MIN) / CAL_TOTAL_MIN) * 100;
                 html += `
-                    <div class="next-available-hint" style="top:calc(${topPct}% - 18px)">
-                        ↓ Next available: ${nextAvail.startTime}
+                    <div class="trip-slot ${statusClass}"
+                         style="top:${topPx}px;height:${heightPx}px;"
+                         data-trip='${dataAttr}'
+                         onclick="handleSlotClick(this)"
+                         role="button"
+                         tabindex="0"
+                         title="Click to book: ${escAttr(trip.label)}">
+                        <span class="slot-time">${trip.startTime} – ${trip.endTime}</span>
+                        <span class="slot-label">${escHtml(trip.label || '')}</span>
+                        <span class="slot-fee">${feeText}</span>
+                        <span class="slot-cta">Tap to book →</span>
+                    </div>`;
+            } else {
+                html += `
+                    <div class="trip-slot ${statusClass}"
+                         style="top:${topPx}px;height:${heightPx}px;"
+                         title="${isBooked ? 'Already booked' : 'Unavailable'}">
+                        <span class="slot-time">${trip.startTime} – ${trip.endTime}</span>
+                        <span class="slot-label">${escHtml(trip.label || '')}</span>
+                        <span class="slot-fee">${feeText}</span>
+                        ${bookedTag}
                     </div>`;
             }
-        }
+        });
 
         html += '</div>'; // end cal-day-column
     });
@@ -232,31 +248,42 @@ function renderCalendar(trips, weekStart) {
     html += '</div>'; // end calendar-grid
 
     container.innerHTML = html;
+
+    // Attach keyboard support (Enter/Space fires click)
+    container.querySelectorAll('.trip-slot[role="button"]').forEach(el => {
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleSlotClick(this);
+            }
+        });
+    });
 }
 
-// ─── Navigation Button State ─────────────────────────────────────────────────
+// ─── Slot Click Handler ───────────────────────────────────────────────────────
+function handleSlotClick(el) {
+    try {
+        const trip = JSON.parse(el.getAttribute('data-trip'));
+        openBookingModal(trip.id, trip.label, trip.startTime, trip.endTime, trip.date, trip.fee);
+    } catch (e) {
+        console.error('Failed to parse trip data:', e);
+    }
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
 function updateNavButtons() {
     const prevBtn = document.getElementById('prevWeekBtn');
     const nextBtn = document.getElementById('nextWeekBtn');
     if (!prevBtn || !nextBtn) return;
 
     const todayMonday = getMondayOf(new Date());
-    const maxMonday   = getMondayOf(new Date(new Date().getFullYear(), 11, 31)); // last week of year
 
     if (currentWeekStart <= todayMonday) {
         prevBtn.classList.add('btn-disabled');
-        prevBtn.setAttribute('aria-disabled','true');
+        prevBtn.setAttribute('aria-disabled', 'true');
     } else {
         prevBtn.classList.remove('btn-disabled');
         prevBtn.removeAttribute('aria-disabled');
-    }
-
-    if (currentWeekStart >= maxMonday) {
-        nextBtn.classList.add('btn-disabled');
-        nextBtn.setAttribute('aria-disabled','true');
-    } else {
-        nextBtn.classList.remove('btn-disabled');
-        nextBtn.removeAttribute('aria-disabled');
     }
 }
 
@@ -278,10 +305,24 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const backdrop = document.getElementById('modal-backdrop');
     const details  = document.getElementById('booking-details');
     const input    = document.getElementById('tripIdInput');
-    if (!modal) return;
+
+    if (!modal || !details) {
+        console.error('Modal elements not found');
+        return;
+    }
 
     const displayDate = new Date(date + 'T00:00:00')
-        .toLocaleDateString('en-ZA', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+        .toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    const feeHtml = fee && fee !== ''
+        ? `<div class="booking-detail-row">
+               <span class="detail-label">Trip Fee</span>
+               <span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span>
+           </div>`
+        : `<div class="booking-detail-row">
+               <span class="detail-label">Trip Fee</span>
+               <span class="detail-value" style="color:var(--text-muted);">To be confirmed</span>
+           </div>`;
 
     details.innerHTML = `
         <div class="booking-detail-row">
@@ -296,16 +337,14 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
             <span class="detail-label">Time</span>
             <span class="detail-value">${startTime} – ${endTime}</span>
         </div>
-        ${fee ? `<div class="booking-detail-row">
-            <span class="detail-label">Fee</span>
-            <span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span>
-        </div>` : '<div class="booking-detail-row"><span class="detail-label">Fee</span><span class="detail-value">To be confirmed</span></div>'}
+        ${feeHtml}
     `;
 
     if (input) input.value = tripId;
 
+    // Show modal
     modal.classList.remove('hidden');
-    backdrop.classList.remove('hidden');
+    if (backdrop) backdrop.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 }
 
@@ -318,31 +357,29 @@ function closeBookingModal() {
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
-
 function timeToMinutes(t) {
     if (!t) return 0;
-    const [h, m] = t.split(':').map(Number);
+    const [h, m] = String(t).split(':').map(Number);
     return h * 60 + (m || 0);
 }
 
 function formatDate(date) {
     const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2,'0');
-    const d = String(date.getDate()).padStart(2,'0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
 }
 
 function parseLocalDate(str) {
-    // "2026-03-16" → local midnight Date
     if (!str) return new Date();
-    const [y, m, d] = str.split('-').map(Number);
+    const [y, m, d] = String(str).split('-').map(Number);
     return new Date(y, m - 1, d);
 }
 
 function getMondayOf(date) {
     const d = new Date(date);
-    d.setHours(0,0,0,0);
-    const day = d.getDay();
+    d.setHours(0, 0, 0, 0);
+    const day  = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
     return d;
@@ -350,10 +387,17 @@ function getMondayOf(date) {
 
 function escHtml(str) {
     return String(str)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function escAttr(str) {
-    return String(str || '').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+    return String(str || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+
+function escAttrJson(obj) {
+    // Serialize to JSON and escape single quotes for use in data-* attribute
+    return JSON.stringify(obj).replace(/'/g, '&#39;');
 }

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/springsecurity6">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing Config — AJ Transportation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="nav-container">
+        <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
+        <div class="nav-links">
+            <a th:href="@{/admin/dashboard}">Schedule</a>
+            <a th:href="@{/admin/trips}">Trips</a>
+            <a th:href="@{/admin/trips/new}">+ New Slot</a>
+            <a th:href="@{/admin/trips/pricing}" class="active">Pricing</a>
+        </div>
+        <div class="nav-actions">
+            <span class="nav-user" sec:authentication="name"></span>
+            <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div style="padding-top: var(--nav-h); min-height: 100vh; background: var(--bg);">
+  <div class="admin-page">
+
+    <div class="admin-header">
+        <div>
+            <h1 class="admin-title">Trip Pricing</h1>
+            <p style="color:var(--text-muted);font-size:0.9rem;">
+                Set the rate per km and minimum fare. These values are used automatically
+                when creating trip slots with Google Maps addresses.
+            </p>
+        </div>
+    </div>
+
+    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+    <div th:if="${errorMessage}"   class="alert alert-error"   th:text="${errorMessage}"></div>
+
+    <div class="admin-card" style="max-width:520px;">
+        <div style="padding:24px 24px 0;">
+            <h3 style="margin-bottom:4px;">Current Pricing</h3>
+            <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:20px;">
+                Fee = distance (km) × rate per km. If that result is below the minimum fare,
+                the minimum fare is charged instead.
+            </p>
+        </div>
+
+        <form th:action="@{/admin/trips/pricing}" method="post" style="padding:0 24px 24px;">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+
+            <div class="form-group">
+                <label class="form-label" for="ratePerKm">Rate per km (R)</label>
+                <input type="number" id="ratePerKm" name="ratePerKm"
+                       step="0.50" min="1.00" max="100.00"
+                       th:value="${config.ratePerKm}"
+                       class="form-input"
+                       placeholder="e.g. 8.00"
+                       required />
+                <div class="form-hint">Uncle Ajmal's confirmed rate: <strong>R8.00/km</strong></div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="minimumFare">Minimum Fare (R)</label>
+                <input type="number" id="minimumFare" name="minimumFare"
+                       step="5.00" min="0.00" max="500.00"
+                       th:value="${config.minimumFare}"
+                       class="form-input"
+                       placeholder="e.g. 50.00"
+                       required />
+                <div class="form-hint">Charged even for very short trips.</div>
+            </div>
+
+            <!-- Live preview -->
+            <div style="background:var(--primary-light);border:1px solid rgba(10,124,110,0.2);
+                        border-radius:12px;padding:16px;margin-bottom:20px;">
+                <p style="font-size:0.8rem;color:var(--primary);font-weight:600;margin-bottom:8px;">
+                    💡 Fee Preview
+                </p>
+                <div style="font-size:0.875rem;color:var(--text-body);">
+                    <span id="previewText">Enter values above to see a sample fee</span>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:12px;">
+                <button type="submit" class="btn btn-primary">Save Pricing</button>
+                <a th:href="@{/admin/trips}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Live fee preview
+function updatePreview() {
+    const rate    = parseFloat(document.getElementById('ratePerKm').value) || 0;
+    const minFare = parseFloat(document.getElementById('minimumFare').value) || 0;
+    const preview = document.getElementById('previewText');
+
+    const examples = [5, 10, 20, 50];
+    const lines = examples.map(km => {
+        const calc = (km * rate).toFixed(2);
+        const fee  = Math.max(parseFloat(calc), minFare).toFixed(2);
+        return `${km} km → R${fee}`;
+    });
+    preview.innerHTML = lines.join(' &nbsp;|&nbsp; ');
+}
+
+document.getElementById('ratePerKm').addEventListener('input', updatePreview);
+document.getElementById('minimumFare').addEventListener('input', updatePreview);
+updatePreview();
+</script>
+<script th:src="@{/js/main.js}"></script>
+</body>
+</html>

@@ -4,11 +4,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book a Trip — AJ Transportation</title>
+    <title>Create Trip Slot — AJ Transportation Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/style.css}">
     <link rel="stylesheet" th:href="@{/css/bookings.css}">
+
+    <style>
+        .maps-auto-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #d1fae5; border: 1px solid #6ee7b7;
+            color: #065f54; font-size: 0.75rem; font-weight: 600;
+            padding: 3px 10px; border-radius: 99px;
+        }
+        .maps-manual-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #fef3c7; border: 1px solid #fde68a;
+            color: #92400e; font-size: 0.75rem; font-weight: 600;
+            padding: 3px 10px; border-radius: 99px;
+        }
+        .mode-info {
+            background: var(--primary-light);
+            border: 1px solid rgba(10,124,110,0.2);
+            border-radius: 12px; padding: 14px 16px;
+            font-size: 0.875rem; color: var(--text-body);
+            margin-bottom: 20px;
+        }
+        .mode-info strong { color: var(--primary); }
+        .optional-fields { transition: opacity 0.2s ease; }
+        .optional-fields.dimmed { opacity: 0.4; pointer-events: none; }
+    </style>
 </head>
 <body>
 
@@ -17,115 +42,200 @@
     <div class="nav-container">
         <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
         <div class="nav-links">
-            <a th:href="@{/}">Home</a>
-            <a th:href="@{/bookings}" class="active">Bookings</a>
-            <a th:href="@{/about}">About</a>
-            <a th:href="@{/contact}">Contact</a>
+            <a th:href="@{/admin/dashboard}">Schedule</a>
+            <a th:href="@{/admin/trips}">Trips</a>
+            <a th:href="@{/admin/trips/new}" class="active">+ New Slot</a>
+            <a th:href="@{/admin/trips/pricing}">Pricing</a>
         </div>
         <div class="nav-actions">
-            <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:10px;">
-                <span class="nav-user" sec:authentication="name"></span>
-                <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
-                <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
-            </div>
-            <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:10px;">
-                <a th:href="@{/login}" class="btn-nav-login">Login</a>
-                <a th:href="@{/register}" class="btn-nav-register">Book Now</a>
-            </div>
+            <span class="nav-user" sec:authentication="name"></span>
+            <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
         </div>
         <button class="nav-hamburger" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
     </div>
     <div class="nav-mobile" id="mobileMenu">
-        <a th:href="@{/}">Home</a>
-        <a th:href="@{/bookings}">Bookings</a>
-        <a th:href="@{/about}">About</a>
-        <a th:href="@{/contact}">Contact</a>
+        <a th:href="@{/admin/dashboard}">Schedule</a>
+        <a th:href="@{/admin/trips}">Trips</a>
+        <a th:href="@{/admin/trips/pricing}">Pricing</a>
+        <a th:href="@{/logout}">Logout</a>
     </div>
 </nav>
 
-<div>
+<div style="padding-top: var(--nav-h); min-height: 100vh; background: var(--bg);">
   <div class="admin-page">
+
     <div class="admin-header">
-      <h1 class="admin-title">Create New Trip Slot</h1>
-      <a href="/admin/trips" class="btn btn-secondary">← View All Trips</a>
+        <div>
+            <h1 class="admin-title">Create New Trip Slot</h1>
+            <p style="color:var(--text-muted);font-size:0.9rem;">
+                Enter pickup &amp; dropoff addresses to auto-calculate distance, trip duration, and fee via Google Maps.
+            </p>
+        </div>
+        <a th:href="@{/admin/trips}" class="btn btn-secondary">← View All Trips</a>
+    </div>
+
+    <!-- Current pricing info -->
+    <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:14px 20px;
+                margin-bottom:20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+        <span style="font-size:0.875rem;color:var(--text-muted);">Current pricing:</span>
+        <span style="font-weight:700;color:var(--primary);">
+            R<span th:text="${currentRate}">8.00</span>/km
+        </span>
+        <span style="font-size:0.875rem;color:var(--text-muted);">
+            Minimum fare: <strong>R<span th:text="${currentMinFare}">50.00</span></strong>
+        </span>
+        <a th:href="@{/admin/trips/pricing}" style="font-size:0.8rem;color:var(--primary);font-weight:600;">
+            Edit pricing →
+        </a>
     </div>
 
     <!-- Success / Error messages -->
     <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+    <div th:if="${errorMessage}"   class="alert alert-error"   th:text="${errorMessage}"></div>
 
     <div class="admin-card">
-      <form action="/admin/trips/new" method="post">
-        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+        <div style="padding:24px;">
 
-        <div class="form-grid">
+            <!-- Mode indicator (updates live via JS) -->
+            <div id="modeInfo" class="mode-info">
+                📍 Enter <strong>pickup and dropoff addresses</strong> to let Google Maps
+                auto-calculate the distance, trip duration (ETA + 15 min buffer), and fee.
+                Leave addresses blank to enter times and fee manually.
+            </div>
 
-          <!-- Date -->
-          <div class="form-group">
-            <label for="date">Trip Date *</label>
-            <input type="date" id="date" name="date" required
-                   th:min="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" />
-            <small>Select the date this slot is available</small>
-          </div>
+            <form action="/admin/trips/new" method="post">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
 
-          <!-- Start Time -->
-          <div class="form-group">
-            <label for="startTime">Start Time *</label>
-            <input type="time" id="startTime" name="startTime" required min="04:00" max="12:00" />
-            <small>Between 04:00 and 12:00</small>
-          </div>
+                <div class="form-grid">
 
-          <!-- End Time -->
-          <div class="form-group">
-            <label for="endTime">End Time *</label>
-            <input type="time" id="endTime" name="endTime" required min="04:00" max="23:59" />
-            <small>Google Maps ETA + 15 min buffer (Phase 8 will auto-calculate)</small>
-          </div>
+                    <!-- Date -->
+                    <div class="form-group">
+                        <label for="date">Trip Date *</label>
+                        <input type="date" id="date" name="date" required
+                               th:min="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" />
+                        <small>Must be today or in the future</small>
+                    </div>
 
-          <!-- Label / Route Name -->
-          <div class="form-group">
-            <label for="label">Route Label *</label>
-            <input type="text" id="label" name="label" required
-                   placeholder="e.g. Cape Town CBD → Airport" maxlength="100" />
-            <small>This is shown to customers on the calendar</small>
-          </div>
+                    <!-- Start Time -->
+                    <div class="form-group">
+                        <label for="startTime">Start Time *</label>
+                        <input type="time" id="startTime" name="startTime" required min="04:00" max="12:00" />
+                        <small>Between 04:00 and 12:00</small>
+                    </div>
 
-          <!-- Pickup Address -->
-          <div class="form-group">
-            <label for="pickupAddress">Pickup Address</label>
-            <input type="text" id="pickupAddress" name="pickupAddress"
-                   placeholder="e.g. 12 Long Street, Cape Town" />
-            <small>Optional until Phase 8 (Google Maps integration)</small>
-          </div>
+                    <!-- Label / Route Name -->
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="label">Route Label *</label>
+                        <input type="text" id="label" name="label" required
+                               placeholder="e.g. Cape Town CBD → Airport" maxlength="100" />
+                        <small>Shown to customers on the calendar</small>
+                    </div>
 
-          <!-- Dropoff Address -->
-          <div class="form-group">
-            <label for="dropoffAddress">Dropoff Address</label>
-            <input type="text" id="dropoffAddress" name="dropoffAddress"
-                   placeholder="e.g. Cape Town International Airport" />
-            <small>Optional until Phase 8 (Google Maps integration)</small>
-          </div>
+                    <!-- Pickup Address -->
+                    <div class="form-group">
+                        <label for="pickupAddress">
+                            Pickup Address
+                            <span class="maps-auto-badge">🗺️ Google Maps</span>
+                        </label>
+                        <input type="text" id="pickupAddress" name="pickupAddress"
+                               oninput="updateMode()"
+                               placeholder="e.g. 12 Long Street, Cape Town" />
+                        <small>Full street address for accurate Google Maps calculation</small>
+                    </div>
 
-          <!-- Fee -->
-          <div class="form-group">
-            <label for="fee">Trip Fee (R)</label>
-            <input type="number" id="fee" name="fee" step="0.01" min="0"
-                   placeholder="e.g. 350.00" />
-            <small>Optional — Phase 8 will auto-calculate from distance</small>
-          </div>
+                    <!-- Dropoff Address -->
+                    <div class="form-group">
+                        <label for="dropoffAddress">
+                            Dropoff Address
+                            <span class="maps-auto-badge">🗺️ Google Maps</span>
+                        </label>
+                        <input type="text" id="dropoffAddress" name="dropoffAddress"
+                               oninput="updateMode()"
+                               placeholder="e.g. Cape Town International Airport" />
+                        <small>Full street address for accurate Google Maps calculation</small>
+                    </div>
 
+                    <!-- Manual fields — dimmed when addresses present -->
+                    <div class="form-group optional-fields" id="manualEndTime">
+                        <label for="endTime">
+                            End Time
+                            <span id="endTimeBadge" class="maps-manual-badge">Manual</span>
+                        </label>
+                        <input type="time" id="endTime" name="endTime" min="04:00" max="23:59" />
+                        <small id="endTimeHint">
+                            Leave blank when using Google Maps — duration is auto-set to
+                            ETA + 15 min buffer.
+                        </small>
+                    </div>
+
+                    <div class="form-group optional-fields" id="manualFee">
+                        <label for="fee">
+                            Trip Fee (R)
+                            <span id="feeBadge" class="maps-manual-badge">Manual</span>
+                        </label>
+                        <input type="number" id="fee" name="fee" step="0.01" min="0"
+                               placeholder="Auto-calculated from Google Maps" />
+                        <small id="feeHint">
+                            Leave blank when using addresses — fee is calculated at
+                            R<span th:text="${currentRate}">8.00</span>/km
+                            (min R<span th:text="${currentMinFare}">50.00</span>).
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create Trip Slot</button>
+                    <a href="/admin/trips" class="btn btn-secondary">Cancel</a>
+                </div>
+
+            </form>
         </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Create Trip Slot</button>
-          <a href="/admin/trips" class="btn btn-secondary">Cancel</a>
-        </div>
-
-      </form>
     </div>
+
   </div>
 </div>
 
+<script>
+function updateMode() {
+    const pickup   = document.getElementById('pickupAddress').value.trim();
+    const dropoff  = document.getElementById('dropoffAddress').value.trim();
+    const hasAddresses = pickup !== '' && dropoff !== '';
+
+    const modeInfo      = document.getElementById('modeInfo');
+    const manualEndTime = document.getElementById('manualEndTime');
+    const manualFee     = document.getElementById('manualFee');
+    const endTimeBadge  = document.getElementById('endTimeBadge');
+    const feeBadge      = document.getElementById('feeBadge');
+    const endTimeHint   = document.getElementById('endTimeHint');
+
+    if (hasAddresses) {
+        modeInfo.innerHTML = '✅ <strong>Google Maps mode active.</strong> Distance, trip duration (ETA + 15 min buffer), and fee will be calculated automatically when you save.';
+        modeInfo.style.background = '#d1fae5';
+        modeInfo.style.border     = '1px solid #6ee7b7';
+        modeInfo.style.color      = '#065f54';
+        manualEndTime.classList.add('dimmed');
+        manualFee.classList.add('dimmed');
+        endTimeBadge.className = 'maps-auto-badge';
+        endTimeBadge.textContent = '🗺️ Auto';
+        feeBadge.className = 'maps-auto-badge';
+        feeBadge.textContent = '🗺️ Auto';
+        endTimeHint.textContent = 'End time will be set automatically: Google Maps ETA + 15 min buffer.';
+    } else {
+        modeInfo.innerHTML = '📍 Enter <strong>pickup and dropoff addresses</strong> to let Google Maps auto-calculate the distance, trip duration (ETA + 15 min buffer), and fee. Leave addresses blank to enter times and fee manually.';
+        modeInfo.style.background = 'var(--primary-light)';
+        modeInfo.style.border     = '1px solid rgba(10,124,110,0.2)';
+        modeInfo.style.color      = 'var(--text-body)';
+        manualEndTime.classList.remove('dimmed');
+        manualFee.classList.remove('dimmed');
+        endTimeBadge.className = 'maps-manual-badge';
+        endTimeBadge.textContent = 'Manual';
+        feeBadge.className = 'maps-manual-badge';
+        feeBadge.textContent = 'Manual';
+        endTimeHint.textContent = 'Leave blank when using Google Maps — duration is auto-set to ETA + 15 min buffer.';
+    }
+}
+</script>
 <script th:src="@{/js/main.js}"></script>
 </body>
 </html>

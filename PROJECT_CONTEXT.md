@@ -15,12 +15,12 @@
 - Customers register via email/username/password and book transportation trips
 - They see a live weekly calendar showing available and booked time slots
 - They cannot book already-taken slots
-- Trip pricing is calculated automatically via a **price-per-km algorithm** based on owner's rates
-- **Google Maps API** used for distance/timing calculations on each trip
-- Each trip slot gets a **15-minute automatic buffer** added to Google Maps ETA to cater for unforeseen stops or delays
+- Trip pricing is calculated automatically via a **price-per-km algorithm** — R8.00/km, minimum R50.00
+- **Google Maps Distance Matrix API** used for real-world distance and ETA on each trip
+- Each trip slot automatically has a **15-minute buffer** added to Google Maps ETA (endTime = startTime + ETA + 15 min)
 - Admin/owner sets trip availability and can **block time slots** (breaks, Friday prayers, sick days, personal reasons)
-- Admin can toggle any slot between **Busy** and **Available** from a separate owner-only interface
-- Payments processed via Ozow (South African EFT) — linked to Uncle Ajmal's account once security is confirmed
+- Admin can toggle any slot between **Blocked**, **Available**, and view Booked slots
+- Payments will be processed via Ozow (South African EFT) — linked after security hardening
 - Both customer and admin have completely separate interfaces
 - Must be mobile responsive (phone + laptop)
 - Must be highly secure before payment account is linked
@@ -36,7 +36,7 @@
 | Frontend | Thymeleaf + HTML + CSS + JavaScript |
 | Database | Supabase (PostgreSQL 17.6) |
 | Payments | Ozow (South African EFT) |
-| Maps/Distance | Google Maps API (Distance Matrix + Directions) |
+| Maps/Distance | Google Maps Distance Matrix API |
 | Build tool | Apache Maven 3.9.14 |
 | Security | Spring Security |
 | Version control | GitHub Desktop |
@@ -61,265 +61,98 @@
 11. Color theme: primary `#0a7c6e` (teal), accent `#f0a500` (gold), dark bg `#0d1117`
 12. Colors, wording, logo, and calendar structure are **NOT final** — placeholders only
 13. Owner logo and photos of Uncle Ajmal + clients still need to be provided
-14. Ozow payment account linked **only after** security is confirmed and app is secure
+14. Ozow payment account linked **only after** Phase 11 security hardening is complete
 15. Admin account created directly in Supabase using bcrypt hash from bcrypt-generator.com
+16. Rate per km is confirmed: **R8.00/km** with a minimum fare of **R50.00**
+17. Google Maps API key stored in `application-local.properties` as `google.maps.api-key`
+18. `RestTemplate` is used for Google Maps calls (no extra Maven dependency needed in Spring Boot)
+19. `GoogleMapsService` gracefully handles missing API key — trip creation still works without it
 
 ---
 
-## 🆕 Key Features to Build
+## 💰 Price-Per-Km Algorithm (IMPLEMENTED — Phase 8)
 
-### 1. 💰 Price-Per-Km Algorithm
-- Admin sets rate/km via dashboard input field
-- Price calculated automatically from Google Maps distance
-- Price shown to user before confirming booking
-- Minimum fare applies regardless of distance
+- Rate: **R8.00/km** (configurable via `/admin/trips/pricing`)
+- Minimum fare: **R50.00** (configurable)
+- Formula: `fee = MAX(distanceKm × ratePerKm, minimumFare)`
+- Google Maps Distance Matrix API provides accurate real-world distance
+- Fee stored on the `trips` table and shown to user in booking modal
+- `PricingConfig` table (id=1) stores current rate + minimum fare
+- `TripService.savePricingConfig()` updates the config row
+- `TripService.getPricingConfig()` loads it with safe defaults if row is absent
 
-### 2. 🗺️ Google Maps Integration
-- Google Maps Distance Matrix API for distance + ETA
-- Estimated time + **15-minute buffer** = slot duration
-- API key stored in `application-local.properties` (never committed)
+---
 
-### 3. ⏱️ 15-Minute Buffer System
-- Every trip: Google Maps ETA + 15 minutes auto-added
-- Prevents double-bookings from traffic/delays
-- Admin can override per-trip if needed (future feature)
+## 🗺️ Google Maps Integration (IMPLEMENTED — Phase 8)
 
-### 4. 🚫 Admin Slot Blocking
-- Admin blocks/unblocks slots with a simple toggle
-- Block entire days (Fridays, sick days, public holidays)
-- Blocked slots show as unavailable on customer calendar
-- Customers cannot see the reason for a block
+**Service:** `GoogleMapsService.java`
 
-### 5. 📸 Branding Assets (Pending from Owner)
-- [ ] Company logo
-- [ ] Photos of Uncle Ajmal
-- [ ] Photos of clients / trips
-- [ ] Exact rate per km (e.g. R8.50/km)
-- [ ] Minimum fare amount
+**What it does:**
+1. Calls `https://maps.googleapis.com/maps/api/distancematrix/json`
+2. Returns `DistanceResult` with:
+   - `distanceKm` — real-world km (2 decimal places)
+   - `etaMinutes` — Google's travel time in minutes
+   - `bufferedDurationMinutes` — etaMinutes + 15
+3. `calculateFee(distanceKm, ratePerKm, minimumFare)` applies the price-per-km formula
 
-### 6. 💳 Ozow Payment Account Linking
-- Only linked after Phase 11 security hardening is complete
+**How trips get enriched automatically:**
+- Admin fills in pickup + dropoff on `/admin/trips/new`
+- On save, `TripService.createTrip()` calls `enrichTripWithGoogleMaps()`
+- Sets: `distanceKm`, `googleEtaMinutes`, `bufferedDurationMinutes`, `endTime`, `fee`
+- If Google Maps fails or API key is missing → trip saved with admin-entered values
 
-### 7. 👤 Admin User Management
-- Admin can view all registered users in a table
-- Admin can block/unblock users (blocked users cannot log in)
-- Admin can remove/delete users entirely from the system
-- Admin can edit any user's username, email, password, and role
-- Blocked users see a clear message on login explaining their account is suspended
+**API key setup (each teammate):**
+```properties
+# application-local.properties
+google.maps.api-key=YOUR_GOOGLE_MAPS_API_KEY
+```
 
-### 8. 📅 Admin Schedule View (4am–12pm)
-- Admin schedule always shows 4:00am–12:00pm time window
-- Admin can select any date from a date picker to view that day's schedule
-- Admin can alter or cancel any existing booking from this view
-- All slots, bookings, and blocks visible at a glance
+---
 
-### 9. 💵 Revenue Dashboard (Real-Time)
-- Admin dashboard shows total revenue for any selected day
-- Revenue split shown: EFT (Ozow) vs cash payments
-- Revenue updates in real time — every new booking/payment reflects immediately
-- `payments` table will store payment_method field: `OZOW` or `CASH`
+## ⏱️ 15-Minute Buffer System (IMPLEMENTED)
 
-### 10. 📲 SMS Notifications
-- User receives SMS on booking confirmation
-- Admin receives SMS when a new booking is made
-- SMS provider to be decided (suggested: Twilio or BulkSMS for South Africa)
-- SMS sending logic added alongside email in Phase 10
+- `endTime = startTime + googleEtaMinutes + 15`
+- Stored as `buffered_duration_minutes` in the `trips` table
+- Prevents double-bookings caused by traffic delays or unforeseen stops
+- Admin can still override `endTime` manually if addresses are not provided
 
-### 11. 🔔 Admin In-App Notifications
-- When a user makes a booking, admin sees a notification inside the app (badge/alert)
-- Notification shows user name, trip date/time, and route
-- Admin can mark notifications as read
-- Notifications stored in a `notifications` table in Supabase
+---
+
+## 📅 Booking Calendar — Fixed Issues (Phase 6 fix session)
+
+**Problems fixed:**
+1. **Trip slots not clickable** — `.slot-pill` had `pointer-events: none` in CSS. Fixed by rebuilding slot HTML in `calendar.js` without pill wrappers, using `onclick="handleSlotClick(this)"` directly on the `.trip-slot` div.
+2. **Modal not opening** — The modal overlay used the wrong CSS class (`modal` + `modal-backdrop` approach) that conflicted with the Thymeleaf `sec:authorize` rendering. Rebuilt the modal as a single `.modal-overlay` div with class `open`/hidden toggled by JS.
+3. **Booking form hidden for guests** — `sec:authorize` sections now correctly show: confirm form for logged-in users, login/register prompt for guests.
+4. **Data attribute approach** — Trip data is now stored as JSON in `data-trip='...'` on each slot div. `handleSlotClick(this)` parses it. No more passing 6 args through `onclick`.
+
+**Files changed in this fix session:**
+- `src/main/resources/static/js/calendar.js` — full rewrite of slot rendering + modal logic
+- `src/main/resources/templates/user/bookings.html` — modal rebuilt, sec:authorize fixed
 
 ---
 
 ## ✅ Phase Completion Status
 
 ### Phase 1 — Setup: ✅ COMPLETE
-- Java 25, Maven 3.9.14, VS Code, GitHub Desktop all installed
-- Supabase project `aj-transportation` created
-- GitHub repo created (private), both teammates added
-
 ### Phase 2 — Spring Boot Project: ✅ COMPLETE
-- Project generated (Spring Boot 4.0.3, Java 21, Maven)
-- All dependencies added
-- Full folder structure created
-- Supabase database connected (`HikariPool-1 - Start completed`)
-- README.md and PROJECT_CONTEXT.md created
-
 ### Phase 3 — Frontend Pages: ✅ COMPLETE
-
-| File | Location |
-|---|---|
-| `index.html` | `src/main/resources/templates/` |
-| `about.html` | `src/main/resources/templates/` |
-| `contact.html` | `src/main/resources/templates/` |
-| `bookings.html` | `src/main/resources/templates/user/` |
-| `base.html` | `src/main/resources/templates/layout/` |
-| `style.css` | `src/main/resources/static/css/` |
-| `bookings.css` | `src/main/resources/static/css/` |
-| `main.js` | `src/main/resources/static/js/` |
-| `calendar.js` | `src/main/resources/static/js/` |
-| `SecurityConfig.java` | `src/main/java/com/ajtransportation/app/config/` |
-| `PageController.java` | `src/main/java/com/ajtransportation/app/controller/` |
-
-**Pages built:**
-- Homepage (`/`) — hero, features, how-it-works, CTA, footer
-- Bookings (`/bookings`) — weekly slot calendar with dummy JS data
-- About (`/about`) — company info, values, social media links
-- Contact (`/contact`) — contact form, details, social links
-
 ### Phase 4 — Database Tables + Java Models: ✅ COMPLETE
-
-**Supabase tables created:**
-- `users` — email, username, bcrypt password, role (USER/ADMIN)
-- `trips` — date, times, addresses, Google Maps fields, fee, status, label
-- `bookings` — links user → trip, tracks status + payment_status
-- `payments` — links booking → Ozow reference, amount, status
-- `pricing_config` — single-row table: rate_per_km + minimum_fare
-
-**Java model classes created (`model/`):**
-- `User.java`
-- `Trip.java`
-- `Booking.java`
-- `Payment.java`
-- `PricingConfig.java`
-
-**Repository interfaces created (`repository/`):**
-- `UserRepository.java` — findByEmail, findByUsername, existsByEmail, existsByUsername
-- `TripRepository.java` — findByDate, findByDateBetween, findByDateBetweenAndStatus, findByStatus
-- `BookingRepository.java` — findByUser, findByUserOrderByCreatedAtDesc, existsByTripIdAndStatusNot
-- `PaymentRepository.java` — findByOzowReference, findByBookingId
-- `PricingConfigRepository.java` — use findById(1) for single config row
-
 ### Phase 5 — User Registration & Login: ✅ COMPLETE
+### Phase 6 — Booking Calendar Backend: ✅ COMPLETE
+### Phase 7 — Admin Dashboard (partial): ✅ COMPLETE (schedule, slot blocking, booking cancel)
+### Phase 8 — Google Maps + Price-Per-Km: ✅ COMPLETE
 
-**Files created:**
+### Phase 7 remaining items: ⬜ TODO
+- Admin User Management (`/admin/users`) — block, unblock, delete, edit users
+- Revenue Dashboard with Ozow vs Cash split
+- In-App Admin Notifications (`notifications` table)
 
-| File | Location |
-|---|---|
-| `AuthController.java` | `src/main/java/com/ajtransportation/app/controller/` |
-| `UserService.java` | `src/main/java/com/ajtransportation/app/service/` |
-| `CustomUserDetailsService.java` | `src/main/java/com/ajtransportation/app/service/` |
-| `RegisterRequest.java` | `src/main/java/com/ajtransportation/app/model/` |
-| `SecurityConfig.java` | `src/main/java/com/ajtransportation/app/config/` (updated) |
-| `login.html` | `src/main/resources/templates/auth/` |
-| `register.html` | `src/main/resources/templates/auth/` |
-| `dashboard.html` | `src/main/resources/templates/user/` |
-
-**What works after Phase 5:**
-- `/register` — form with email, username, password, confirm password
-- `/login` — Spring Security form login with email + password
-- `/dashboard` — logged-in users see their account details (bookings empty for now)
-- `/logout` — clears session, redirects to homepage
-- Passwords stored as BCrypt hashes (never plain text)
-- Duplicate email/username validation on registration
-- Role-based access: USER vs ADMIN routes protected
-- Navbar shows correct buttons based on login state (sec:authorize)
-- Admin user created directly in Supabase SQL Editor using bcrypt-generator.com
-
-**Important — dev endpoint cleaned up:**
-- `/dev/hashgen` endpoint was added temporarily during debugging and has been **removed**
-- `SecurityConfig.java` no longer references `/dev/hashgen`
-- `AuthController.java` no longer contains the `generateHash` method
-
-### Phase 6 — Booking Calendar Backend: 🔄 NEXT
-### Phase 7 — Admin Dashboard + Slot Blocking + User Management + Revenue: ⬜ TODO
-### Phase 8 — Google Maps + Price-Per-Km Algorithm: ⬜ TODO
 ### Phase 9 — Ozow Payment Integration: ⬜ TODO
 ### Phase 10 — Email + SMS Notifications: ⬜ TODO
 ### Phase 11 — Security Hardening + Ozow Account Link: ⬜ TODO
 ### Phase 12 — Mobile Responsiveness & Testing: ⬜ TODO
 ### Phase 13 — Deployment: ⬜ TODO
-
----
-
-## 📌 Phase 6 Plan — Booking Calendar Backend
-
-**Goal:** Replace dummy JS trip data with real trips from the database, and allow users to create real bookings.
-
-**Agreed approach — partial Phase 6 + Phase 7 combined:**
-Because the calendar needs real trips to display, we build a simple admin trip creation form FIRST, then connect the calendar to show those trips, then wire up user booking logic.
-
-### Step 1 — TripService.java (new file in `service/`)
-- `getTripsForWeek(LocalDate weekStart)` — fetch trips from DB for Mon–Sun range
-- `getTripById(UUID id)` — fetch single trip
-- `createTrip(Trip trip)` — save new trip (admin only)
-- `updateTripStatus(UUID id, String status)` — mark AVAILABLE / BOOKED / BLOCKED
-
-### Step 2 — BookingService.java (new file in `service/`)
-- `createBooking(User user, UUID tripId)` — create booking + mark trip BOOKED
-- `getUserBookings(User user)` — get all bookings for a user
-
-### Step 3 — AdminTripController.java (new file in `controller/`)
-- GET `/admin/trips/new` — show form to create a trip slot
-- POST `/admin/trips/new` — save trip to DB, redirect back
-- GET `/admin/trips` — list all trips
-
-### Step 4 — BookingsController.java (new file in `controller/`)
-- GET `/bookings` — pass real trip data as JSON to Thymeleaf + calendar.js
-- POST `/bookings/book` — receive tripId, create booking, redirect to payment placeholder
-
-### Step 5 — Update `bookings.html` + `calendar.js`
-- Remove SAMPLE_TRIPS dummy data from calendar.js
-- Pass real trips from Thymeleaf model as a JSON variable to calendar.js
-- Calendar renders real trips from DB
-
-### Step 6 — Update `dashboard.html`
-- Show real booking count stats
-- Show user's actual bookings in the table
-
-### Step 7 — Admin trip creation page (`admin/trips-new.html`)
-- Simple form: date, start time, label, fee fields
-- No Google Maps yet (Phase 8) — manual entry for now
-
----
-
-## 📌 Phase 7 Plan — Admin Dashboard, User Management & Revenue
-
-**Goal:** Full admin control over the system — schedule, users, bookings, and revenue.
-
-### Step 1 — Admin Schedule View
-- Admin can pick any date via date picker
-- Schedule renders all slots for that day from **4:00am to 12:00pm**
-- Each slot shows: time, user name (if booked), route, status, fee
-- Admin can cancel or alter any existing booking from this view
-- Slots colour-coded: AVAILABLE (green), BOOKED (blue), BLOCKED (red)
-
-### Step 2 — Admin Slot + Booking Management
-- Block/unblock individual time slots (existing feature, now wired fully)
-- Block entire days (sick day, Friday prayers, public holidays)
-- Cancel a booking on behalf of a user
-- Alter booking details (change date/time, reassign trip)
-- All changes reflected immediately on the user-facing calendar
-
-### Step 3 — Admin User Management (`/admin/users`)
-- Table of all registered users: name, email, role, status, joined date
-- Block a user — sets `is_blocked = true` on `users` table; blocked users cannot log in
-- Unblock a user
-- Delete a user (with confirmation prompt)
-- Edit a user's username, email, password (re-hashed), or role
-- Add `is_blocked` (BOOLEAN, default false) column to `users` table in Supabase
-
-### Step 4 — Revenue Dashboard (Real-Time)
-- Admin dashboard shows revenue panel for selected date
-- Total revenue = sum of all PAID bookings for that day
-- Split by payment method: **EFT (Ozow)** and **Cash**
-- Add `payment_method` column to `payments` table: `OZOW` or `CASH`
-- Revenue figures reload automatically (polling or on page refresh)
-- Running monthly total also shown for context
-
-### Step 5 — In-App Admin Notifications
-- New `notifications` table in Supabase: id, message, is_read, created_at
-- When a user books a trip, a notification row is inserted
-- Admin navbar shows unread notification count (badge)
-- `/admin/notifications` page lists all notifications, newest first
-- Admin can mark all as read
-
-### New Supabase columns needed for Phase 7:
-- `users.is_blocked` — BOOLEAN, default false
-- `payments.payment_method` — VARCHAR, values: `OZOW` or `CASH`
-- New table: `notifications` — id (UUID), message (VARCHAR), is_read (BOOLEAN default false), created_at (TIMESTAMP)
 
 ---
 
@@ -330,56 +163,66 @@ aj-transportation/
 │
 ├── src/main/java/com/ajtransportation/app/
 │   ├── config/
-│   │   └── SecurityConfig.java          ✅ Phase 5 — login/register/admin routes
+│   │   └── SecurityConfig.java                  ✅ Phase 5 + @EnableMethodSecurity
 │   ├── controller/
-│   │   ├── PageController.java          ✅ Maps / /about /contact /bookings
-│   │   └── AuthController.java          ✅ /register /login /dashboard (cleaned up)
+│   │   ├── PageController.java                  ✅ /, /about, /contact
+│   │   ├── AuthController.java                  ✅ /register, /login, /dashboard
+│   │   ├── BookingsController.java              ✅ /bookings, /bookings/book, /bookings/cancel
+│   │   ├── AdminTripController.java             ✅ /admin/trips/**, /admin/trips/pricing
+│   │   └── AdminDashboardController.java        ✅ /admin/dashboard (Day/Week/Month views)
 │   ├── model/
-│   │   ├── User.java                    ✅ Phase 4
-│   │   ├── Trip.java                    ✅ Phase 4
-│   │   ├── Booking.java                 ✅ Phase 4
-│   │   ├── Payment.java                 ✅ Phase 4
-│   │   ├── PricingConfig.java           ✅ Phase 4
-│   │   └── RegisterRequest.java         ✅ Phase 5
+│   │   ├── User.java                            ✅ Phase 4
+│   │   ├── Trip.java                            ✅ Phase 4
+│   │   ├── Booking.java                         ✅ Phase 4
+│   │   ├── Payment.java                         ✅ Phase 4
+│   │   ├── PricingConfig.java                   ✅ Phase 4
+│   │   └── RegisterRequest.java                 ✅ Phase 5
 │   ├── repository/
-│   │   ├── UserRepository.java          ✅ Phase 4
-│   │   ├── TripRepository.java          ✅ Phase 4
-│   │   ├── BookingRepository.java       ✅ Phase 4
-│   │   ├── PaymentRepository.java       ✅ Phase 4
-│   │   └── PricingConfigRepository.java ✅ Phase 4
+│   │   ├── UserRepository.java                  ✅ Phase 4
+│   │   ├── TripRepository.java                  ✅ Phase 4
+│   │   ├── BookingRepository.java               ✅ Phase 4
+│   │   ├── PaymentRepository.java               ✅ Phase 4
+│   │   └── PricingConfigRepository.java         ✅ Phase 4
 │   ├── service/
-│   │   ├── UserService.java             ✅ Phase 5
-│   │   └── CustomUserDetailsService.java ✅ Phase 5
-│   └── AppApplication.java              ✅ Working
+│   │   ├── UserService.java                     ✅ Phase 5
+│   │   ├── CustomUserDetailsService.java        ✅ Phase 5
+│   │   ├── TripService.java                     ✅ Phase 6 + Phase 8 (Google Maps enrichment)
+│   │   ├── BookingService.java                  ✅ Phase 6
+│   │   └── GoogleMapsService.java               ✅ Phase 8 (NEW)
+│   └── AppApplication.java                      ✅
 │
 ├── src/main/resources/
 │   ├── templates/
-│   │   ├── index.html                   ✅ Homepage
-│   │   ├── about.html                   ✅ About page
-│   │   ├── contact.html                 ✅ Contact page
+│   │   ├── index.html                           ✅ Homepage
+│   │   ├── about.html                           ✅ About page
+│   │   ├── contact.html                         ✅ Contact page
 │   │   ├── auth/
-│   │   │   ├── login.html               ✅ Phase 5
-│   │   │   └── register.html            ✅ Phase 5
+│   │   │   ├── login.html                       ✅ Phase 5
+│   │   │   └── register.html                    ✅ Phase 5
 │   │   ├── user/
-│   │   │   ├── bookings.html            ✅ Calendar (dummy data — Phase 6 will connect DB)
-│   │   │   └── dashboard.html           ✅ Phase 5 (static zeros — Phase 6 will connect DB)
-│   │   ├── admin/                       ⬜ Phase 6/7 — trip creation form goes here
+│   │   │   ├── bookings.html                    ✅ Phase 6 (FIXED — modal + click working)
+│   │   │   └── dashboard.html                   ✅ Phase 6
+│   │   ├── admin/
+│   │   │   ├── dashboard.html                   ✅ Phase 7 (Day/Week/Month views)
+│   │   │   ├── trips-list.html                  ✅ Phase 6
+│   │   │   ├── trips-new.html                   ✅ Phase 8 (Google Maps mode indicator)
+│   │   │   └── pricing.html                     ✅ Phase 8 (NEW — rate/km + minimum fare)
 │   │   └── layout/
-│   │       └── base.html                ✅ Shared layout
+│   │       └── base.html                        ✅ Shared layout
 │   ├── static/
 │   │   ├── css/
-│   │   │   ├── style.css                ✅ Main styles (includes .form-input-error)
-│   │   │   └── bookings.css             ✅ Calendar styles
+│   │   │   ├── style.css                        ✅ Main styles
+│   │   │   └── bookings.css                     ✅ Calendar styles
 │   │   ├── js/
-│   │   │   ├── main.js                  ✅ Navbar + animations
-│   │   │   └── calendar.js              ✅ Weekly calendar (dummy data — Phase 6 replaces)
-│   │   └── images/                      ⬜ Awaiting assets from Uncle Ajmal
-│   ├── application.properties           ✅ Committed to GitHub
-│   └── application-local.properties     ✅ Local only — GITIGNORED
+│   │   │   ├── main.js                          ✅ Navbar + animations
+│   │   │   └── calendar.js                      ✅ Phase 6 FIXED — click-to-book working
+│   │   └── images/                              ⬜ Awaiting assets from Uncle Ajmal
+│   ├── application.properties                   ✅ Committed to GitHub
+│   └── application-local.properties             ✅ Local only — GITIGNORED
 │
-├── pom.xml                              ✅ All dependencies
-├── .gitignore                           ✅ Protects secrets
-└── README.md                            ✅ Professional readme
+├── pom.xml                                      ✅ All dependencies
+├── .gitignore                                   ✅ Protects secrets
+└── README.md                                    ✅
 ```
 
 ---
@@ -418,13 +261,13 @@ supabase.anon-key=[ANON_KEY]
 supabase.service-role-key=[SERVICE_ROLE_KEY]
 spring.mail.username=YOUR_GMAIL@gmail.com
 spring.mail.password=YOUR_GMAIL_APP_PASSWORD
-# Google Maps API key (add in Phase 8)
+# Google Maps API key — required for Phase 8 auto-calculation
 google.maps.api-key=YOUR_GOOGLE_MAPS_API_KEY
 ```
 
 ---
 
-## 📦 pom.xml Dependencies (Current)
+## 📦 pom.xml Dependencies (Current — no new dependencies needed for Phase 8)
 
 ```
 spring-boot-starter-data-jpa
@@ -432,27 +275,28 @@ spring-boot-starter-mail
 spring-boot-starter-security
 spring-boot-starter-thymeleaf
 spring-boot-starter-validation
-spring-boot-starter-webmvc
+spring-boot-starter-webmvc          ← includes RestTemplate
 thymeleaf-extras-springsecurity6
 spring-boot-devtools (runtime)
 postgresql (runtime)
+jackson-datatype-jsr310             ← for LocalDate/LocalTime JSON serialisation
 ```
 
-> 📌 Google Maps Java client library will be added to pom.xml in Phase 8
+> 📌 `RestTemplate` is included with `spring-boot-starter-webmvc` — no extra dependency needed for Google Maps calls.
 
 ---
 
-## 🗄️ Database Tables (Created in Supabase — Phase 4)
+## 🗄️ Database Tables (Supabase — Phase 4 + Phase 7 additions needed)
 
 ### `users`
 | Column | Type | Notes |
 |---|---|---|
-| id | UUID | Primary key, auto-generated |
+| id | UUID | Primary key |
 | email | VARCHAR | Unique, used for login |
 | username | VARCHAR | Display name |
-| password | VARCHAR | BCrypt hashed — NEVER plain text |
+| password | VARCHAR | BCrypt hashed |
 | role | VARCHAR | USER or ADMIN |
-| is_blocked | BOOLEAN | Default false — blocked users cannot log in (add in Phase 7) |
+| is_blocked | BOOLEAN | Default false — add in Phase 7 user management |
 | created_at | TIMESTAMP | Auto-set |
 
 ### `trips`
@@ -461,15 +305,15 @@ postgresql (runtime)
 | id | UUID | Primary key |
 | date | DATE | Trip date |
 | start_time | TIME | Start of slot |
-| end_time | TIME | End of slot — Google ETA + 15 min buffer |
-| pickup_address | VARCHAR | For Google Maps calculation |
-| dropoff_address | VARCHAR | For Google Maps calculation |
-| distance_km | DECIMAL | Fetched from Google Maps |
+| end_time | TIME | startTime + googleEtaMinutes + 15 min buffer |
+| pickup_address | VARCHAR | For Google Maps |
+| dropoff_address | VARCHAR | For Google Maps |
+| distance_km | DECIMAL | From Google Maps Distance Matrix |
 | google_eta_minutes | INT | Raw ETA from Google |
 | buffered_duration_minutes | INT | google_eta + 15 |
-| fee | DECIMAL | Calculated by price-per-km algorithm |
+| fee | DECIMAL | = MAX(distanceKm × R8.00, R50.00) |
 | status | VARCHAR | AVAILABLE / BOOKED / BLOCKED |
-| blocked_reason | VARCHAR | Internal only — not shown to customers |
+| blocked_reason | VARCHAR | Internal only |
 | label | VARCHAR | Route name shown on calendar |
 | created_at | TIMESTAMP | Auto-set |
 
@@ -490,201 +334,70 @@ postgresql (runtime)
 | booking_id | UUID | FK → bookings |
 | amount | DECIMAL | Amount paid |
 | ozow_reference | VARCHAR | Ozow transaction ID |
-| payment_method | VARCHAR | `OZOW` or `CASH` — add in Phase 7 for revenue split |
+| payment_method | VARCHAR | `OZOW` or `CASH` — add in Phase 7 |
 | status | VARCHAR | PENDING / SUCCESS / FAILED |
 | created_at | TIMESTAMP | Auto-set |
 
-### `notifications` *(add in Phase 7)*
+### `notifications` *(Phase 7 — not yet created)*
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID | Primary key |
-| message | VARCHAR | e.g. "John Doe booked Trip on 2026-04-01 at 08:00" |
+| message | VARCHAR | e.g. "John booked Trip on 2026-04-01 at 08:00" |
 | is_read | BOOLEAN | Default false |
 | created_at | TIMESTAMP | Auto-set |
 
 ### `pricing_config`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT | Primary key (always = 1, single row) |
-| rate_per_km | DECIMAL | Set by admin e.g. R8.50/km |
-| minimum_fare | DECIMAL | Minimum charge regardless of distance |
+| id | INT | Always = 1 (single row) |
+| rate_per_km | DECIMAL | R8.00/km (Uncle Ajmal's confirmed rate) |
+| minimum_fare | DECIMAL | R50.00 |
 | updated_at | TIMESTAMP | Last updated |
 
 ---
 
-## 🗺️ URL Routing (Current + Planned)
+## 🗺️ URL Routing (Current State)
 
 | URL | Status | Auth |
 |---|---|---|
 | `/` | ✅ Built | ❌ Public |
 | `/about` | ✅ Built | ❌ Public |
 | `/contact` | ✅ Built | ❌ Public |
-| `/bookings` | ✅ Built (dummy data) | ❌ Public |
+| `/bookings` | ✅ Built + Fixed | ❌ Public |
+| `/bookings/book` | ✅ Phase 6 | ✅ Logged in |
+| `/bookings/cancel/{id}` | ✅ Phase 6 | ✅ Logged in |
 | `/login` | ✅ Phase 5 | ❌ Public |
 | `/register` | ✅ Phase 5 | ❌ Public |
-| `/dashboard` | ✅ Phase 5 | ✅ Logged in |
+| `/dashboard` | ✅ Phase 5 + 6 | ✅ Logged in |
 | `/logout` | ✅ Phase 5 | ✅ Logged in |
-| `/bookings/book` | ⬜ Phase 6 | ✅ Logged in |
-| `/admin/trips` | ⬜ Phase 6 | ✅ ADMIN only |
-| `/admin/trips/new` | ⬜ Phase 6 | ✅ ADMIN only |
-| `/admin/dashboard` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/slots/block` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/bookings/edit/{id}` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/bookings/cancel/{id}` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/users` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/users/edit/{id}` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/users/block/{id}` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/users/delete/{id}` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/revenue` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/notifications` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/pricing` | ⬜ Phase 8 | ✅ ADMIN only |
-| `/api/price-estimate` | ⬜ Phase 8 | ❌ Public API |
+| `/admin/trips` | ✅ Phase 6 | ✅ ADMIN only |
+| `/admin/trips/new` | ✅ Phase 6 + 8 | ✅ ADMIN only |
+| `/admin/trips/pricing` | ✅ Phase 8 | ✅ ADMIN only |
+| `/admin/trips/block/{id}` | ✅ Phase 6 | ✅ ADMIN only |
+| `/admin/trips/unblock/{id}` | ✅ Phase 6 | ✅ ADMIN only |
+| `/admin/trips/delete/{id}` | ✅ Phase 6 | ✅ ADMIN only |
+| `/admin/dashboard` | ✅ Phase 7 | ✅ ADMIN only |
+| `/admin/dashboard/block/{id}` | ✅ Phase 7 | ✅ ADMIN only |
+| `/admin/dashboard/unblock/{id}` | ✅ Phase 7 | ✅ ADMIN only |
+| `/admin/dashboard/cancel-by-trip/{id}` | ✅ Phase 7 | ✅ ADMIN only |
+| `/admin/users` | ⬜ Phase 7 remaining | ✅ ADMIN only |
+| `/admin/users/edit/{id}` | ⬜ Phase 7 remaining | ✅ ADMIN only |
+| `/admin/users/block/{id}` | ⬜ Phase 7 remaining | ✅ ADMIN only |
+| `/admin/users/delete/{id}` | ⬜ Phase 7 remaining | ✅ ADMIN only |
+| `/admin/revenue` | ⬜ Phase 7 remaining | ✅ ADMIN only |
+| `/admin/notifications` | ⬜ Phase 7 remaining | ✅ ADMIN only |
+| `/api/price-estimate` | ⬜ Future | ❌ Public API |
 
 ---
 
-## 🔐 SecurityConfig.java (Current — Phase 5)
+## 🔐 SecurityConfig.java (Current — Phase 5, unchanged)
 
-```java
-package com.ajtransportation.app.config;
-
-import com.ajtransportation.app.service.CustomUserDetailsService;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.SecurityFilterChain;
-
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-
-    private final CustomUserDetailsService userDetailsService;
-
-    public SecurityConfig(CustomUserDetailsService userDetailsService) {
-        this.userDetailsService = userDetailsService;
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/css/**", "/js/**", "/images/**", "/fonts/**").permitAll()
-                .requestMatchers("/", "/about", "/contact", "/bookings").permitAll()
-                .requestMatchers("/login", "/register").permitAll()
-                .requestMatchers("/admin/**").hasRole("ADMIN")
-                .anyRequest().authenticated()
-            )
-            .formLogin(form -> form
-                .loginPage("/login")
-                .loginProcessingUrl("/login")
-                .defaultSuccessUrl("/dashboard", true)
-                .failureUrl("/login?error=true")
-                .permitAll()
-            )
-            .logout(logout -> logout
-                .logoutUrl("/logout")
-                .logoutSuccessUrl("/?logout=true")
-                .invalidateHttpSession(true)
-                .deleteCookies("JSESSIONID")
-                .permitAll()
-            )
-            .userDetailsService(userDetailsService);
-
-        return http.build();
-    }
-}
-```
-
----
-
-## 🔐 AuthController.java (Current — cleaned up)
-
-```java
-package com.ajtransportation.app.controller;
-
-import com.ajtransportation.app.model.RegisterRequest;
-import com.ajtransportation.app.model.User;
-import com.ajtransportation.app.service.UserService;
-import jakarta.validation.Valid;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-
-@Controller
-public class AuthController {
-
-    private final UserService userService;
-
-    public AuthController(UserService userService) {
-        this.userService = userService;
-    }
-
-    @GetMapping("/login")
-    public String loginPage(
-            @RequestParam(value = "error", required = false) String error,
-            @RequestParam(value = "logout", required = false) String logout,
-            Model model) {
-        if (error != null) {
-            model.addAttribute("errorMessage", "Incorrect email or password. Please try again.");
-        }
-        if (logout != null) {
-            model.addAttribute("successMessage", "You have been logged out successfully.");
-        }
-        return "auth/login";
-    }
-
-    @GetMapping("/register")
-    public String registerPage(Model model) {
-        model.addAttribute("registerRequest", new RegisterRequest());
-        return "auth/register";
-    }
-
-    @PostMapping("/register")
-    public String registerSubmit(
-            @Valid @ModelAttribute("registerRequest") RegisterRequest request,
-            BindingResult bindingResult,
-            Model model) {
-        if (bindingResult.hasErrors()) {
-            return "auth/register";
-        }
-        String errorMessage = userService.register(request);
-        if (errorMessage != null) {
-            model.addAttribute("errorMessage", errorMessage);
-            return "auth/register";
-        }
-        return "redirect:/login?registered=true";
-    }
-
-    @GetMapping("/dashboard")
-    public String dashboard(
-            @AuthenticationPrincipal UserDetails userDetails,
-            Model model) {
-        User user = userService.findByEmail(userDetails.getUsername());
-        model.addAttribute("user", user);
-        return "user/dashboard";
-    }
-}
-```
+- `/css/**`, `/js/**`, `/images/**`, `/fonts/**` — public
+- `/`, `/about`, `/contact`, `/bookings` — public
+- `/login`, `/register` — public
+- `/admin/**` — ADMIN role only
+- Everything else — authenticated users only
+- `@EnableMethodSecurity` enabled for `@PreAuthorize` on controllers
 
 ---
 
@@ -693,10 +406,11 @@ public class AuthController {
 - [ ] Company logo (PNG or SVG preferred)
 - [ ] Photos of Uncle Ajmal (for About page)
 - [ ] Photos of clients / trips (for homepage)
-- [ ] Exact rate per km he charges (e.g. R8.50/km)
-- [ ] Minimum fare amount (if any)
-- [ ] Confirmation of which days/times to block by default (e.g. every Friday 12:00–14:00)
-- [ ] Any other features he wants added
+- [x] Rate per km — **confirmed R8.00/km**
+- [ ] Minimum fare — **using R50.00 as placeholder**
+- [ ] Days/times to block by default (e.g. every Friday 12:00–14:00)
+- [ ] Ozow merchant credentials (for Phase 9)
+- [ ] Any other features requested
 
 ---
 
@@ -706,6 +420,7 @@ public class AuthController {
 - Always **Fetch + Pull** before starting work each day
 - Always **Commit + Push** when done for the day
 - `application-local.properties` shared privately via WhatsApp — never via GitHub
+- Google Maps API key goes in `application-local.properties` — never commit it
 
 ---
 
@@ -727,4 +442,31 @@ public class AuthController {
 - **Email:** `admin@ajtransportation.co.za`
 - **Password:** whatever was entered into bcrypt-generator.com when creating the hash
 - Admin account was inserted directly into Supabase using SQL — role is `ADMIN`
-- To create additional admin accounts, repeat the same SQL INSERT process with a new bcrypt hash
+
+---
+
+## 🗺️ How to Get a Google Maps API Key (for Phase 8)
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Create a project (or use existing)
+3. Enable the **Distance Matrix API**
+4. Go to **APIs & Services → Credentials → Create API Key**
+5. Copy the key
+6. Add to your local `application-local.properties`:
+   ```properties
+   google.maps.api-key=AIzaSy...yourkey...
+   ```
+7. Restart the app (`Ctrl+C` then `mvn spring-boot:run`)
+8. Create a trip with pickup + dropoff address — distance, ETA, and fee will auto-populate
+
+> ⚠️ Google Maps requires a billing account but has a $200/month free tier — more than enough for this app.
+
+---
+
+## ⚠️ Known Items for Next Session
+
+- **Phase 7 remaining:** Admin user management, revenue dashboard, in-app notifications
+- **Phase 9:** Ozow payment integration (only after security hardening)
+- **`is_blocked` column** needs to be added to `users` table in Supabase for user blocking feature
+- **`payment_method` column** needs to be added to `payments` table for revenue split
+- **`notifications` table** needs to be created in Supabase
