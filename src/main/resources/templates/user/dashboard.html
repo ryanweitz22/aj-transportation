@@ -32,12 +32,7 @@
         <span class="stat-label">Total Trips</span>
       </div>
       <div class="stat-card">
-        <span class="stat-number">
-          <!-- Count only CONFIRMED + PAID bookings -->
-          <th:block th:with="paidCount=${#lists.size(bookings.?[status == 'CONFIRMED' and paymentStatus == 'PAID'])}">
-            <span th:text="${paidCount}">0</span>
-          </th:block>
-        </span>
+        <span class="stat-number" th:text="${totalBookingCount}">0</span>
         <span class="stat-label">Completed Trips</span>
       </div>
     </div>
