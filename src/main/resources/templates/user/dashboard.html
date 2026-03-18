@@ -10,11 +10,12 @@
     <link rel="stylesheet" th:href="@{/css/style.css}">
 </head>
 <body>
-
-<!-- NAVBAR -->
 <nav class="navbar">
     <div class="nav-container">
-        <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
+        <a href="/" class="nav-logo">
+            <div class="logo-aj">AJ</div>
+            <span class="logo-text">Transportation</span>
+        </a>
         <div class="nav-links">
             <a th:href="@{/}">Home</a>
             <a th:href="@{/bookings}">Bookings</a>
@@ -26,7 +27,9 @@
             <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
             <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
         </div>
-        <button class="nav-hamburger" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()">
+            <span></span><span></span><span></span>
+        </button>
     </div>
     <div class="nav-mobile" id="mobileMenu">
         <a th:href="@{/}">Home</a>
@@ -37,106 +40,122 @@
     </div>
 </nav>
 
-<div style="padding-top: var(--nav-h); min-height: 100vh; background: var(--bg);">
-  <div class="dashboard-page">
+<div style="padding-top:var(--nav-h);min-height:100vh;background:var(--bg);">
+    <div class="dashboard-page">
+        <div class="dashboard-header">
+            <div>
+                <h1>Welcome back, <span th:text="${user.username}">User</span> 👋</h1>
+                <p th:text="${user.email}" class="dashboard-email"></p>
+            </div>
+            <a href="/bookings" class="btn btn-primary">+ Book a Trip</a>
+        </div>
 
-    <!-- Welcome Header -->
-    <div class="dashboard-header">
-      <div>
-        <h1>Welcome back, <span th:text="${user.username}">User</span> 👋</h1>
-        <p th:text="${user.email}" class="dashboard-email"></p>
-      </div>
-      <a href="/bookings" class="btn btn-primary">+ Book a Trip</a>
+        <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+        <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-number" th:text="${activeBookingCount}">0</span>
+                <span class="stat-label">Active Bookings</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" th:text="${totalBookingCount}">0</span>
+                <span class="stat-label">Total Trips Booked</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" th:text="${pendingRequestCount}">0</span>
+                <span class="stat-label">Pending Requests</span>
+            </div>
+        </div>
+
+        <!-- BOOKINGS TABLE -->
+        <div class="dashboard-section">
+            <h2>My Bookings</h2>
+            <div th:if="${#lists.isEmpty(bookings)}" class="empty-state">
+                <p>No bookings yet.</p>
+                <a href="/bookings" class="btn btn-primary">Browse available slots →</a>
+            </div>
+            <div th:unless="${#lists.isEmpty(bookings)}" class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Route</th>
+                            <th>Fee</th>
+                            <th>Status</th>
+                            <th>Payment</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="booking : ${bookings}">
+                            <td th:text="${#temporals.format(booking.trip.date,'EEE dd MMM yyyy')}"></td>
+                            <td>
+                                <span th:text="${#temporals.format(booking.trip.startTime,'HH:mm')}"></span>
+                                <span th:if="${booking.trip.endTime != null}"> – <span th:text="${#temporals.format(booking.trip.endTime,'HH:mm')}"></span></span>
+                            </td>
+                            <td th:text="${booking.trip.label}"></td>
+                            <td th:text="${booking.trip.fee != null ? 'R' + booking.trip.fee : '—'}"></td>
+                            <td>
+                                <span class="status-badge"
+                                      th:classappend="${booking.status=='CONFIRMED'}?'badge-confirmed':(${booking.status=='CANCELLED'}?'badge-cancelled':'badge-pending')"
+                                      th:text="${booking.status}"></span>
+                            </td>
+                            <td>
+                                <span class="status-badge"
+                                      th:classappend="${booking.paymentStatus=='PAID'}?'badge-paid':'badge-unpaid'"
+                                      th:text="${booking.paymentStatus}"></span>
+                            </td>
+                            <td>
+                                <form th:if="${booking.status != 'CANCELLED' and booking.trip.date.isAfter(#temporals.createNow().toLocalDate())}"
+                                      th:action="@{/bookings/cancel/{id}(id=${booking.id})}" method="post" style="display:inline;">
+                                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                                    <button type="submit" class="btn btn-sm btn-danger"
+                                            onclick="return confirm('Cancel this booking?')">Cancel</button>
+                                </form>
+                                <span th:if="${booking.status == 'CANCELLED'}" class="text-muted">—</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TRIP REQUESTS LOG -->
+        <div class="dashboard-section" th:if="${not #lists.isEmpty(tripRequests)}">
+            <h2>My Trip Requests</h2>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Status</th>
+                            <th>Admin Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="req : ${tripRequests}">
+                            <td th:text="${#temporals.format(req.requestedDate,'EEE dd MMM yyyy')}"></td>
+                            <td th:text="${#temporals.format(req.requestedStartTime,'HH:mm')}"></td>
+                            <td th:text="${req.pickupAddress}"></td>
+                            <td th:text="${req.dropoffAddress}"></td>
+                            <td>
+                                <span class="status-badge"
+                                      th:classappend="${req.status=='APPROVED'}?'badge-confirmed':(${req.status=='REJECTED'}?'badge-cancelled':'badge-pending')"
+                                      th:text="${req.status}"></span>
+                            </td>
+                            <td style="color:var(--text-muted);font-size:0.8rem;"
+                                th:text="${req.adminNotes != null ? req.adminNotes : '—'}"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-
-    <!-- Flash messages -->
-    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
-
-    <!-- Stats cards -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <span class="stat-number" th:text="${activeBookingCount}">0</span>
-        <span class="stat-label">Active Bookings</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-number" th:text="${totalBookingCount}">0</span>
-        <span class="stat-label">Total Trips</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-number" th:text="${totalBookingCount}">0</span>
-        <span class="stat-label">Completed Trips</span>
-      </div>
-    </div>
-
-    <!-- Bookings Table -->
-    <div class="dashboard-section">
-      <h2>Your Bookings</h2>
-
-      <!-- Empty state -->
-      <div th:if="${#lists.isEmpty(bookings)}" class="empty-state">
-        <p>You haven't made any bookings yet.</p>
-        <a href="/bookings" class="btn btn-primary">Browse available slots →</a>
-      </div>
-
-      <!-- Bookings table -->
-      <div th:unless="${#lists.isEmpty(bookings)}" class="table-wrapper">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Route</th>
-              <th>Fee</th>
-              <th>Booking Status</th>
-              <th>Payment</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr th:each="booking : ${bookings}">
-              <td th:text="${#temporals.format(booking.trip.date, 'EEE dd MMM yyyy')}"></td>
-              <td th:text="${#temporals.format(booking.trip.startTime, 'HH:mm')} + ' – ' + ${#temporals.format(booking.trip.endTime, 'HH:mm')}"></td>
-              <td th:text="${booking.trip.label}"></td>
-              <td th:text="${booking.trip.fee != null ? 'R' + booking.trip.fee : '—'}"></td>
-
-              <!-- Booking status badge -->
-              <td>
-                <span class="status-badge"
-                      th:classappend="${booking.status == 'CONFIRMED'} ? 'badge-confirmed' :
-                                      (${booking.status == 'CANCELLED'} ? 'badge-cancelled' : 'badge-pending')"
-                      th:text="${booking.status}">
-                </span>
-              </td>
-
-              <!-- Payment status badge -->
-              <td>
-                <span class="status-badge"
-                      th:classappend="${booking.paymentStatus == 'PAID'} ? 'badge-paid' : 'badge-unpaid'"
-                      th:text="${booking.paymentStatus}">
-                </span>
-              </td>
-
-              <!-- Cancel button (only if not already cancelled and trip is in the future) -->
-              <td>
-                <form th:if="${booking.status != 'CANCELLED' and booking.trip.date.isAfter(#temporals.createNow().toLocalDate())}"
-                      th:action="@{/bookings/cancel/{id}(id=${booking.id})}"
-                      method="post" style="display:inline;">
-                  <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
-                  <button type="submit" class="btn btn-sm btn-danger"
-                          onclick="return confirm('Are you sure you want to cancel this booking?')">
-                    Cancel
-                  </button>
-                </form>
-                <span th:if="${booking.status == 'CANCELLED'}" class="text-muted">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-  </div>
 </div>
 
 <script th:src="@{/js/main.js}"></script>

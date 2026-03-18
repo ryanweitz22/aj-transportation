@@ -1,124 +1,78 @@
 /**
  * calendar.js — AJ Transportation
- * Phase 6 + Phase 8 fix:
- *  - Trip slots are fully clickable (no pointer-events issues)
- *  - Booking modal opens correctly on click
- *  - 4am–12pm window with correct pixel math
- *  - Month/week navigation
+ * Green  = existing AVAILABLE trip  → click to book immediately
+ * Amber  = open business hours slot → click to request a trip
+ * Red    = BOOKED
+ * Grey   = past / blocked / closed
  */
 
-// ─── State ────────────────────────────────────────────────────────────────────
 let currentWeekStart = null;
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
-
     let trips = [];
-    try {
-        trips = JSON.parse(TRIPS_DATA);
-    } catch (e) {
-        console.error('Failed to parse TRIPS_DATA:', e);
-        trips = [];
-    }
+    let businessHours = {};
+    try { trips = JSON.parse(TRIPS_DATA); }         catch (e) { trips = []; }
+    try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); } catch (e) { businessHours = {}; }
 
     trips = trips.map(normaliseTrip);
-    window._allTrips = trips;
-
     currentWeekStart = parseLocalDate(WEEK_START);
 
     buildMonthDropdown();
-    renderCalendar(trips, currentWeekStart);
+    renderCalendar(trips, businessHours, currentWeekStart);
     updateNavButtons();
 
-    // Close modal when clicking outside the box
-    const modal = document.getElementById('booking-modal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) closeBookingModal();
-        });
-    }
-
-    // Close modal on Escape key
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeBookingModal();
+    ['booking-modal','request-modal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', e => { if (e.target === el) closeAllModals(); });
     });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllModals(); });
 });
 
-// ─── Normalise Jackson array format → strings ─────────────────────────────────
+// ─── Normalise ────────────────────────────────────────────────────────────────
 function normaliseTrip(t) {
-    return {
-        ...t,
-        date:      normaliseDate(t.date),
-        startTime: normaliseTime(t.startTime),
-        endTime:   normaliseTime(t.endTime),
-    };
+    return { ...t, date: normaliseDate(t.date), startTime: normaliseTime(t.startTime), endTime: normaliseTime(t.endTime) };
 }
-
 function normaliseDate(d) {
     if (!d) return '';
-    if (Array.isArray(d)) {
-        return `${d[0]}-${String(d[1]).padStart(2,'0')}-${String(d[2]).padStart(2,'0')}`;
-    }
+    if (Array.isArray(d)) return `${d[0]}-${String(d[1]).padStart(2,'0')}-${String(d[2]).padStart(2,'0')}`;
     return String(d);
 }
-
 function normaliseTime(t) {
     if (!t) return '';
-    if (Array.isArray(t)) {
-        return `${String(t[0]).padStart(2,'0')}:${String(t[1]).padStart(2,'0')}`;
-    }
+    if (Array.isArray(t)) return `${String(t[0]).padStart(2,'0')}:${String(t[1]).padStart(2,'0')}`;
     return String(t).substring(0, 5);
 }
 
-// ─── Month Dropdown ───────────────────────────────────────────────────────────
+// ─── Month dropdown ───────────────────────────────────────────────────────────
 function buildMonthDropdown() {
-    // Target whichever monthSelect exists on the page (there may be two)
     const selects = document.querySelectorAll('#monthSelect');
     if (!selects.length) return;
-
-    const now         = new Date();
-    const currentYear = now.getFullYear();
-    const MONTHS      = ['January','February','March','April','May','June',
-                         'July','August','September','October','November','December'];
-
-    selects.forEach(select => {
-        // Clear existing options (prevent duplicates on re-render)
-        select.innerHTML = '';
+    const now = new Date();
+    const yr  = now.getFullYear();
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    selects.forEach(sel => {
+        sel.innerHTML = '';
         for (let m = 0; m < 12; m++) {
-            const opt = document.createElement('option');
-            opt.value       = `${currentYear}-${String(m + 1).padStart(2,'0')}-01`;
-            opt.textContent = `${MONTHS[m]} ${currentYear}`;
-            if (m === currentWeekStart.getMonth() && currentYear === currentWeekStart.getFullYear()) {
-                opt.selected = true;
-            }
-            select.appendChild(opt);
+            const o = document.createElement('option');
+            o.value = `${yr}-${String(m+1).padStart(2,'0')}-01`;
+            o.textContent = `${MONTHS[m]} ${yr}`;
+            if (m === currentWeekStart.getMonth() && yr === currentWeekStart.getFullYear()) o.selected = true;
+            sel.appendChild(o);
         }
     });
 }
+function jumpToMonth(v) { if (v) navigateToWeek(getMondayOf(parseLocalDate(v))); }
+function navigateToWeek(d) { window.location.href = `/bookings?week=${formatDate(d)}`; }
 
-function jumpToMonth(value) {
-    if (!value) return;
-    const d = parseLocalDate(value);
-    currentWeekStart = getMondayOf(d);
-    navigateToWeek(currentWeekStart);
-}
-
-function navigateToWeek(mondayDate) {
-    window.location.href = `/bookings?week=${formatDate(mondayDate)}`;
-}
-
-// ─── Calendar Render ──────────────────────────────────────────────────────────
-function renderCalendar(trips, weekStart) {
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderCalendar(trips, businessHours, weekStart) {
     const container = document.getElementById('calendar-container');
     if (!container) return;
 
-    const today     = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const DAY_NAMES   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    const dayNames   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-    // Build 7 day objects
     const days = [];
     for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
@@ -126,277 +80,223 @@ function renderCalendar(trips, weekStart) {
         days.push(d);
     }
 
-    // Calendar window: 04:00–12:00 = 480 min
-    const CAL_START_MIN = 4 * 60;   // 240
-    const CAL_TOTAL_MIN = 8 * 60;   // 480
-
-    // Row height per hour in pixels (used for accurate slot positioning)
-    const PX_PER_HOUR = 60;
-    const TOTAL_HEIGHT = PX_PER_HOUR * 8; // 480px for 04:00–12:00
+    const CAL_START = 4 * 60;   // 04:00 in minutes
+    const PX_HOUR   = 60;
+    const TOTAL_H   = PX_HOUR * 8; // 8 hours shown
 
     let html = '<div class="calendar-grid">';
 
-    // ── Header row ──
-    html += '<div class="calendar-header-row">';
-    html += '<div class="time-gutter"></div>';
+    // Header
+    html += '<div class="calendar-header-row"><div class="time-gutter"></div>';
     days.forEach((day, i) => {
         const isToday = day.getTime() === today.getTime();
         const isPast  = day < today;
-        html += `
-            <div class="cal-day-header ${isToday ? 'today' : ''} ${isPast && !isToday ? 'past-day' : ''}">
-                <span class="day-name">${dayNames[i]}</span>
-                <span class="day-date">${day.getDate()} ${monthNames[day.getMonth()]}</span>
-            </div>`;
+        html += `<div class="cal-day-header ${isToday?'today':''} ${isPast&&!isToday?'past-day':''}">
+            <span class="day-name">${DAY_NAMES[i]}</span>
+            <span class="day-date">${day.getDate()} ${MONTH_NAMES[day.getMonth()]}</span>
+        </div>`;
     });
     html += '</div>';
 
-    // ── Body ──
-    html += `<div class="calendar-body" style="height:${TOTAL_HEIGHT}px;">`;
+    // Body
+    html += `<div class="calendar-body" style="height:${TOTAL_H}px;">`;
 
-    // Time labels column
+    // Time column
     html += '<div class="time-column">';
     for (let h = 4; h <= 12; h++) {
-        html += `<div class="time-label" style="height:${PX_PER_HOUR}px;">${String(h).padStart(2,'0')}:00</div>`;
+        html += `<div class="time-label" style="height:${PX_HOUR}px;">${String(h).padStart(2,'0')}:00</div>`;
     }
     html += '</div>';
 
     // Day columns
-    days.forEach((day) => {
+    days.forEach(day => {
         const dateStr  = formatDate(day);
         const isPast   = day < today;
         const dayTrips = trips
             .filter(t => t.date === dateStr)
-            .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+            .sort((a,b) => timeToMin(a.startTime) - timeToMin(b.startTime));
 
-        html += `<div class="cal-day-column ${isPast ? 'past-col' : ''}" style="height:${TOTAL_HEIGHT}px;">`;
+        const bh     = businessHours[dateStr] || {};
+        const bhOpen  = bh.open  ? timeToMin(bh.open)  : null;
+        const bhClose = bh.close ? timeToMin(bh.close) : null;
+        const isOpen  = bhOpen !== null && bhClose !== null;
 
-        // Hour grid lines
+        html += `<div class="cal-day-column ${isPast?'past-col':''}" style="height:${TOTAL_H}px;">`;
+
+        // Hour lines
         for (let h = 0; h <= 8; h++) {
-            const topPx = h * PX_PER_HOUR;
-            html += `<div class="hour-line" style="top:${topPx}px;"></div>`;
+            html += `<div class="hour-line" style="top:${h*PX_HOUR}px;"></div>`;
         }
 
-        // Trip slots — rendered as clickable divs
+        // ── Amber open slots ──────────────────────────────────────────────────
+        if (!isPast && isOpen) {
+            let t = bhOpen;
+            while (t < bhClose) {
+                // Only draw if within our display window
+                if (t >= CAL_START && t < CAL_START + 8*60) {
+                    const covered = dayTrips.some(trip => {
+                        const s = timeToMin(trip.startTime);
+                        const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
+                        return t >= s && t < e;
+                    });
+                    if (!covered) {
+                        const topPx = ((t - CAL_START) / 60) * PX_HOUR;
+                        const hPx   = Math.max((30/60)*PX_HOUR - 2, 22);
+                        const timeStr = minToTime(t);
+                        const slotData = JSON.stringify({date:dateStr,time:timeStr}).replace(/'/g,'&#39;');
+                        html += `<div class="trip-slot slot-open"
+                            style="top:${topPx}px;height:${hPx}px;"
+                            data-open='${slotData}'
+                            onclick="handleOpenSlotClick(this)"
+                            role="button" tabindex="0"
+                            title="Request a trip at ${timeStr}">
+                            <span class="slot-time">${timeStr}</span>
+                            <span class="slot-label">Tap to request</span>
+                        </div>`;
+                    }
+                }
+                t += 30;
+            }
+        }
+
+        // ── Existing trip slots ───────────────────────────────────────────────
         dayTrips.forEach(trip => {
-            const startMin = timeToMinutes(trip.startTime);
-            const endMin   = timeToMinutes(trip.endTime);
+            const s   = timeToMin(trip.startTime);
+            const e   = trip.endTime ? timeToMin(trip.endTime) : s + 60;
+            if (e <= CAL_START || s >= CAL_START + 8*60) return;
 
-            // Skip trips completely outside 04:00–12:00
-            if (endMin <= CAL_START_MIN || startMin >= CAL_START_MIN + CAL_TOTAL_MIN) return;
+            const cs = Math.max(s, CAL_START);
+            const ce = Math.min(e, CAL_START + 8*60);
+            const topPx = ((cs - CAL_START)/60)*PX_HOUR;
+            const hPx   = Math.max(((ce-cs)/60)*PX_HOUR, 36);
 
-            const clampedStart = Math.max(startMin, CAL_START_MIN);
-            const clampedEnd   = Math.min(endMin, CAL_START_MIN + CAL_TOTAL_MIN);
+            const avail  = trip.status === 'AVAILABLE' && !isPast;
+            const booked = trip.status === 'BOOKED';
+            const cls    = avail ? 'slot-available' : booked ? 'slot-booked' : 'slot-blocked';
+            const fee    = trip.fee ? `R${parseFloat(trip.fee).toFixed(2)}` : '';
+            const endLbl = trip.endTime ? ` – ${trip.endTime}` : '';
 
-            const topPx    = ((clampedStart - CAL_START_MIN) / 60) * PX_PER_HOUR;
-            const heightPx = Math.max(((clampedEnd - clampedStart) / 60) * PX_PER_HOUR, 36);
-
-            const isAvailable = trip.status === 'AVAILABLE' && !isPast;
-            const isBooked    = trip.status === 'BOOKED';
-
-            const statusClass = isAvailable ? 'slot-available'
-                              : isBooked    ? 'slot-booked'
-                              : 'slot-blocked';
-
-            const feeText = trip.fee
-                ? `R${parseFloat(trip.fee).toFixed(2)}`
-                : 'Fee TBC';
-
-            const bookedTag = isBooked
-                ? '<span class="slot-status-tag">Booked</span>'
-                : '';
-
-            // Available slots get onclick; booked/past slots show a "not available" cursor
-            if (isAvailable) {
-                const tripData = {
-                    id:        trip.id,
-                    label:     trip.label || '',
-                    startTime: trip.startTime,
-                    endTime:   trip.endTime,
-                    date:      trip.date,
-                    fee:       trip.fee || ''
-                };
-                const dataAttr = escAttrJson(tripData);
-
-                html += `
-                    <div class="trip-slot ${statusClass}"
-                         style="top:${topPx}px;height:${heightPx}px;"
-                         data-trip='${dataAttr}'
-                         onclick="handleSlotClick(this)"
-                         role="button"
-                         tabindex="0"
-                         title="Click to book: ${escAttr(trip.label)}">
-                        <span class="slot-time">${trip.startTime} – ${trip.endTime}</span>
-                        <span class="slot-label">${escHtml(trip.label || '')}</span>
-                        <span class="slot-fee">${feeText}</span>
-                        <span class="slot-cta">Tap to book →</span>
-                    </div>`;
+            if (avail) {
+                const data = JSON.stringify({
+                    id:trip.id, label:trip.label||'', startTime:trip.startTime,
+                    endTime:trip.endTime||'', date:trip.date, fee:trip.fee||''
+                }).replace(/'/g,'&#39;');
+                html += `<div class="trip-slot ${cls}"
+                    style="top:${topPx}px;height:${hPx}px;"
+                    data-trip='${data}'
+                    onclick="handleSlotClick(this)"
+                    role="button" tabindex="0">
+                    <span class="slot-time">${trip.startTime}${endLbl}</span>
+                    <span class="slot-label">${escHtml(trip.label||'')}</span>
+                    <span class="slot-fee">${fee}</span>
+                    <span class="slot-cta">Tap to book →</span>
+                </div>`;
             } else {
-                html += `
-                    <div class="trip-slot ${statusClass}"
-                         style="top:${topPx}px;height:${heightPx}px;"
-                         title="${isBooked ? 'Already booked' : 'Unavailable'}">
-                        <span class="slot-time">${trip.startTime} – ${trip.endTime}</span>
-                        <span class="slot-label">${escHtml(trip.label || '')}</span>
-                        <span class="slot-fee">${feeText}</span>
-                        ${bookedTag}
-                    </div>`;
+                html += `<div class="trip-slot ${cls}"
+                    style="top:${topPx}px;height:${hPx}px;">
+                    <span class="slot-time">${trip.startTime}${endLbl}</span>
+                    <span class="slot-label">${escHtml(trip.label||'')}</span>
+                    <span class="slot-fee">${fee}</span>
+                    ${booked?'<span class="slot-status-tag">Booked</span>':''}
+                </div>`;
             }
         });
 
-        html += '</div>'; // end cal-day-column
+        html += '</div>';
     });
 
-    html += '</div>'; // end calendar-body
-    html += '</div>'; // end calendar-grid
-
+    html += '</div></div>';
     container.innerHTML = html;
 
-    // Attach keyboard support (Enter/Space fires click)
     container.querySelectorAll('.trip-slot[role="button"]').forEach(el => {
-        el.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleSlotClick(this);
-            }
+        el.addEventListener('keydown', e => {
+            if (e.key==='Enter'||e.key===' ') { e.preventDefault(); el.click(); }
         });
     });
 }
 
-// ─── Slot Click Handler ───────────────────────────────────────────────────────
+// ─── Click handlers ───────────────────────────────────────────────────────────
 function handleSlotClick(el) {
     try {
-        const trip = JSON.parse(el.getAttribute('data-trip'));
-        openBookingModal(trip.id, trip.label, trip.startTime, trip.endTime, trip.date, trip.fee);
-    } catch (e) {
-        console.error('Failed to parse trip data:', e);
-    }
+        const t = JSON.parse(el.getAttribute('data-trip'));
+        openBookingModal(t.id, t.label, t.startTime, t.endTime, t.date, t.fee);
+    } catch(e) { console.error(e); }
 }
 
-// ─── Navigation ───────────────────────────────────────────────────────────────
-function updateNavButtons() {
-    const prevBtn = document.getElementById('prevWeekBtn');
-    const nextBtn = document.getElementById('nextWeekBtn');
-    if (!prevBtn || !nextBtn) return;
-
-    const todayMonday = getMondayOf(new Date());
-
-    if (currentWeekStart <= todayMonday) {
-        prevBtn.classList.add('btn-disabled');
-        prevBtn.setAttribute('aria-disabled', 'true');
-    } else {
-        prevBtn.classList.remove('btn-disabled');
-        prevBtn.removeAttribute('aria-disabled');
-    }
+function handleOpenSlotClick(el) {
+    try {
+        const s = JSON.parse(el.getAttribute('data-open'));
+        openRequestModal(s.date, s.time);
+    } catch(e) { console.error(e); }
 }
 
-function goToPrevWeek() {
-    const prev = new Date(currentWeekStart);
-    prev.setDate(prev.getDate() - 7);
-    navigateToWeek(prev);
-}
-
-function goToNextWeek() {
-    const next = new Date(currentWeekStart);
-    next.setDate(next.getDate() + 7);
-    navigateToWeek(next);
-}
-
-// ─── Booking Modal ────────────────────────────────────────────────────────────
+// ─── Book modal ───────────────────────────────────────────────────────────────
 function openBookingModal(tripId, label, startTime, endTime, date, fee) {
-    const modal    = document.getElementById('booking-modal');
-    const backdrop = document.getElementById('modal-backdrop');
-    const details  = document.getElementById('booking-details');
-    const input    = document.getElementById('tripIdInput');
+    const modal   = document.getElementById('booking-modal');
+    const details = document.getElementById('booking-details');
+    const input   = document.getElementById('tripIdInput');
+    if (!modal||!details) return;
 
-    if (!modal || !details) {
-        console.error('Modal elements not found');
-        return;
-    }
-
-    const displayDate = new Date(date + 'T00:00:00')
-        .toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-    const feeHtml = fee && fee !== ''
-        ? `<div class="booking-detail-row">
-               <span class="detail-label">Trip Fee</span>
-               <span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span>
-           </div>`
-        : `<div class="booking-detail-row">
-               <span class="detail-label">Trip Fee</span>
-               <span class="detail-value" style="color:var(--text-muted);">To be confirmed</span>
-           </div>`;
+    const displayDate = new Date(date+'T00:00:00').toLocaleDateString('en-ZA',
+        {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const timeLbl = endTime ? `${startTime} – ${endTime}` : startTime;
+    const feeLine = fee && fee!==''
+        ? `<div class="booking-detail-row"><span class="detail-label">Fee</span><span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span></div>`
+        : `<div class="booking-detail-row"><span class="detail-label">Fee</span><span class="detail-value" style="color:var(--text-muted);">To be confirmed</span></div>`;
 
     details.innerHTML = `
-        <div class="booking-detail-row">
-            <span class="detail-label">Route</span>
-            <span class="detail-value">${escHtml(label)}</span>
-        </div>
-        <div class="booking-detail-row">
-            <span class="detail-label">Date</span>
-            <span class="detail-value">${displayDate}</span>
-        </div>
-        <div class="booking-detail-row">
-            <span class="detail-label">Time</span>
-            <span class="detail-value">${startTime} – ${endTime}</span>
-        </div>
-        ${feeHtml}
-    `;
+        <div class="booking-detail-row"><span class="detail-label">Route</span><span class="detail-value">${escHtml(label)}</span></div>
+        <div class="booking-detail-row"><span class="detail-label">Date</span><span class="detail-value">${displayDate}</span></div>
+        <div class="booking-detail-row"><span class="detail-label">Time</span><span class="detail-value">${timeLbl}</span></div>
+        ${feeLine}`;
 
     if (input) input.value = tripId;
-
-    // Show modal
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
 }
 
-function closeBookingModal() {
-    const modal = document.getElementById('booking-modal');
-    if (modal) modal.classList.remove('open');
+// ─── Request modal ────────────────────────────────────────────────────────────
+function openRequestModal(date, time) {
+    const modal = document.getElementById('request-modal');
+    if (!modal) return;
+
+    const displayDate = new Date(date+'T00:00:00').toLocaleDateString('en-ZA',
+        {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+    const summary = document.getElementById('request-slot-summary');
+    if (summary) summary.textContent = `${displayDate} at ${time}`;
+
+    const di = document.getElementById('requestedDate');
+    const ti = document.getElementById('requestedStartTime');
+    if (di) di.value = date;
+    if (ti) ti.value = time;
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+// ─── Close ────────────────────────────────────────────────────────────────────
+function closeAllModals() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
     document.body.style.overflow = '';
 }
 
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function updateNavButtons() {
+    const prev = document.getElementById('prevWeekBtn');
+    const next = document.getElementById('nextWeekBtn');
+    if (!prev||!next) return;
+    const todayMon = getMondayOf(new Date());
+    if (currentWeekStart <= todayMon) { prev.classList.add('btn-disabled'); prev.setAttribute('aria-disabled','true'); }
+    else { prev.classList.remove('btn-disabled'); prev.removeAttribute('aria-disabled'); }
+}
+function goToPrevWeek() { const p=new Date(currentWeekStart); p.setDate(p.getDate()-7); navigateToWeek(p); }
+function goToNextWeek() { const n=new Date(currentWeekStart); n.setDate(n.getDate()+7); navigateToWeek(n); }
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
-function timeToMinutes(t) {
-    if (!t) return 0;
-    const [h, m] = String(t).split(':').map(Number);
-    return h * 60 + (m || 0);
-}
-
-function formatDate(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-}
-
-function parseLocalDate(str) {
-    if (!str) return new Date();
-    const [y, m, d] = String(str).split('-').map(Number);
-    return new Date(y, m - 1, d);
-}
-
-function getMondayOf(date) {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    const day  = d.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    return d;
-}
-
-function escHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-function escAttr(str) {
-    return String(str || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
-}
-
-function escAttrJson(obj) {
-    // Serialize to JSON and escape single quotes for use in data-* attribute
-    return JSON.stringify(obj).replace(/'/g, '&#39;');
-}
+function timeToMin(t) { if(!t)return 0; const[h,m]=String(t).split(':').map(Number); return h*60+(m||0); }
+function minToTime(m) { return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; }
+function formatDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function parseLocalDate(s) { if(!s)return new Date(); const[y,m,d]=String(s).split('-').map(Number); return new Date(y,m-1,d); }
+function getMondayOf(d) { const x=new Date(d); x.setHours(0,0,0,0); const day=x.getDay(); x.setDate(x.getDate()+(day===0?-6:1-day)); return x; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
