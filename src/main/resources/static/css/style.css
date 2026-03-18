@@ -873,4 +873,62 @@ tbody tr:hover td { background: var(--bg); }
 .fee-highlight { color: var(--primary); font-size: 1rem; }
 .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
 .modal-login-prompt { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 16px; }
-.modal-login-prompt a { color: var(--primary); font-weight: 600; }
+.modal-login-prompt a { color: var(--primary); font-weight: 600;
+/* Month select dropdown in bookings header */
+.month-select-btn {
+    padding: 8px 14px; border-radius: var(--radius-full);
+    border: 1.5px solid var(--border); font-size: 0.875rem;
+    font-family: var(--font-body); color: var(--text-dark);
+    background: white; cursor: pointer; outline: none;
+    transition: var(--transition);
+}
+.month-select-btn:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(10,124,110,0.1); }
+
+/* Past day column — slightly dimmed */
+.past-col { opacity: 0.55; pointer-events: none; }
+.cal-day-header.past-day { opacity: 0.6; }
+
+/* Next-available hint label */
+.next-available-hint {
+    position: absolute; left: 4px; right: 4px;
+    background: var(--accent-light); border: 1px dashed var(--accent);
+    border-radius: 4px; padding: 2px 6px;
+    font-size: 0.65rem; font-weight: 600; color: #92400e;
+    pointer-events: none; z-index: 2; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Admin schedule controls bar */
+.admin-schedule-controls {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    background: white; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 20px;
+}
+
+/* View toggle (Day / Week / Month) */
+.view-toggle {
+    display: flex; gap: 4px;
+    background: var(--bg); border-radius: var(--radius-full);
+    padding: 4px; border: 1px solid var(--border);
+}
+.view-btn {
+    padding: 6px 18px; border-radius: var(--radius-full);
+    font-size: 0.85rem; font-weight: 500; color: var(--text-muted);
+    transition: var(--transition); text-decoration: none;
+}
+.view-btn:hover { color: var(--primary); }
+.view-btn.active { background: white; color: var(--primary); box-shadow: var(--shadow-sm); font-weight: 600; }
+
+/* Admin stats row — override 4-col to 3-col */
+.admin-page .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+}
+.admin-page .stat-card {
+    flex-direction: column; align-items: flex-start; gap: 6px;
+}
+.admin-page .stat-number {
+    font-family: var(--font-head); font-size: 2rem;
+    font-weight: 800; color: var(--primary);
+}
+}

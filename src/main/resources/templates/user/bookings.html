@@ -48,94 +48,120 @@
 
     <!-- Page Header -->
     <div class="bookings-header">
-      <h1>Book Your Trip</h1>
-      <p>Browse available slots and book up to a year in advance.</p>
+      <div>
+        <h1>Book Your Trip</h1>
+        <p>Browse available slots and book up to a year in advance. Green = available, red = booked.</p>
+      </div>
+      <!-- Book Now quick action for logged-in users -->
+      <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+        <span style="font-size:0.85rem;color:var(--text-muted);">Jump to month:</span>
+        <select id="monthSelect" class="month-select-btn" onchange="jumpToMonth(this.value)">
+          <!-- Populated by calendar.js -->
+        </select>
+      </div>
+      <div sec:authorize="isAnonymous()" style="flex-shrink:0;">
+        <a href="/register" class="btn btn-primary">
+          📅 Book Now
+        </a>
+      </div>
     </div>
 
-    <!-- Success / Error flash messages -->
+    <!-- Flash messages -->
     <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
     <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
 
-    <!-- Week navigation -->
+    <!-- Week navigation bar -->
     <div class="week-nav">
-      <!-- Disable Prev if we're already on the current week -->
-      <a th:href="@{/bookings(week=${prevWeek})}"
-         th:classappend="${prevWeek.isBefore(#temporals.createNow().toLocalDate().with(T(java.time.DayOfWeek).MONDAY))} ? 'btn-disabled' : ''"
-         class="btn btn-secondary week-nav-btn">
+      <button id="prevWeekBtn" class="btn btn-secondary week-nav-btn" onclick="goToPrevWeek()">
         ← Previous Week
-      </a>
+      </button>
 
       <span class="week-label"
             th:text="${#temporals.format(weekStart, 'dd MMM')} + ' – ' + ${#temporals.format(weekEnd, 'dd MMM yyyy')}">
       </span>
 
-      <!-- Disable Next if we've reached 1 year out -->
-      <a th:href="@{/bookings(week=${nextWeek})}"
-         th:classappend="${nextWeek.isAfter(maxWeek)} ? 'btn-disabled' : ''"
-         class="btn btn-secondary week-nav-btn">
+      <button id="nextWeekBtn" class="btn btn-secondary week-nav-btn" onclick="goToNextWeek()">
         Next Week →
-      </a>
+      </button>
+
+      <!-- Month jump for guests (no account dropdown) -->
+      <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+        <span style="font-size:0.85rem;color:var(--text-muted);">Jump to:</span>
+        <select id="monthSelect" class="month-select-btn" onchange="jumpToMonth(this.value)">
+          <!-- Populated by calendar.js -->
+        </select>
+      </div>
     </div>
 
-    <!-- Calendar Legend -->
+    <!-- Legend -->
     <div class="calendar-legend">
-      <span class="legend-item"><span class="dot dot-available"></span> Available</span>
+      <span class="legend-item"><span class="dot dot-available"></span> Available — click to book</span>
       <span class="legend-item"><span class="dot dot-booked"></span> Booked</span>
+      <span class="legend-item">
+        <span style="width:10px;height:10px;border-radius:2px;background:var(--text-light);display:inline-block;"></span>
+        Past / unavailable
+      </span>
     </div>
 
-    <!-- Login prompt for guests -->
+    <!-- Login banner for guests -->
     <div sec:authorize="isAnonymous()" class="info-banner">
-      <p>🔒 <a href="/login">Log in</a> or <a href="/register">register</a> to book a slot.</p>
+      🔒 <a href="/login">Log in</a> or <a href="/register">create a free account</a> to book a slot.
+      Available slots are shown in green — tap one to get started.
     </div>
 
-    <!-- Calendar container — calendar.js renders slots here -->
-    <div id="calendar-container" class="calendar-container">
-      <!-- Slots are rendered by calendar.js using the tripsJson variable below -->
-    </div>
+    <!-- Calendar -->
+    <div id="calendar-container" class="calendar-container"></div>
 
-    <!-- Booking form (hidden by default, shown by calendar.js when user clicks a slot) -->
+    <!-- Booking modal (hidden by default) -->
     <div id="booking-modal" class="modal hidden">
       <div class="modal-content">
-        <h2>Confirm Booking</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h2 style="margin:0;">Confirm Your Booking</h2>
+          <button onclick="closeBookingModal()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
+        </div>
         <div id="booking-details"></div>
 
         <sec:authorize access="isAuthenticated()">
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+            Your booking will be confirmed immediately. Payment is collected via Ozow EFT.
+          </p>
           <form id="booking-form" action="/bookings/book" method="post">
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
             <input type="hidden" id="tripIdInput" name="tripId" value="" />
             <div class="modal-actions">
-              <button type="submit" class="btn btn-primary">Confirm Booking</button>
+              <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center;">
+                ✓ Confirm Booking
+              </button>
               <button type="button" class="btn btn-secondary" onclick="closeBookingModal()">Cancel</button>
             </div>
           </form>
         </sec:authorize>
 
         <sec:authorize access="isAnonymous()">
-          <p class="modal-login-prompt">Please <a href="/login">log in</a> to confirm this booking.</p>
-          <button type="button" class="btn btn-secondary" onclick="closeBookingModal()">Close</button>
+          <p class="modal-login-prompt">
+            You need to <a href="/login">log in</a> or <a href="/register">register</a> to confirm this booking.
+          </p>
+          <div style="display:flex;gap:12px;margin-top:16px;">
+            <a href="/login" class="btn btn-primary" style="flex:1;justify-content:center;">Log In</a>
+            <a href="/register" class="btn btn-secondary" style="flex:1;justify-content:center;">Register</a>
+          </div>
         </sec:authorize>
-
       </div>
     </div>
 
-    <!-- Overlay backdrop for modal -->
+    <!-- Modal backdrop -->
     <div id="modal-backdrop" class="modal-backdrop hidden" onclick="closeBookingModal()"></div>
 
   </div>
-
-  <!--
-    Pass real trip data from the server into JavaScript.
-    Thymeleaf writes the JSON string directly into the script so calendar.js can use it.
-    The th:utext is intentional — the JSON is already escaped by the ObjectMapper.
-  -->
-  <script th:inline="javascript">
-    const TRIPS_DATA = /*[[${tripsJson}]]*/ '[]';
-    const WEEK_START = /*[[${weekStart}]]*/ '';
-  </script>
-
-  <script src="/js/calendar.js"></script>
 </div>
 
+<!-- Inject trip data for calendar.js -->
+<script th:inline="javascript">
+  const TRIPS_DATA = /*[[${tripsJson}]]*/ '[]';
+  const WEEK_START = /*[[${weekStart}]]*/ '';
+</script>
+
+<script src="/js/calendar.js"></script>
 <script th:src="@{/js/main.js}"></script>
 </body>
 </html>
