@@ -1,197 +1,101 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org"
-      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book a Trip | AJ Transportation</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" th:href="@{/css/style.css}">
-    <link rel="stylesheet" th:href="@{/css/bookings.css}">
-</head>
-<body>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/springsecurity6"
+      th:replace="~{layout/base :: layout(~{::title}, ~{::main})}">
 
-<!-- NAVBAR -->
-<nav class="navbar">
-    <div class="nav-container">
-        <a href="/" class="nav-logo">
-            <div class="logo-aj">AJ</div>
-            <span class="logo-text">Transportation</span>
-        </a>
-        <div class="nav-links">
-            <a th:href="@{/}">Home</a>
-            <a th:href="@{/bookings}" class="active">Bookings</a>
-            <a th:href="@{/about}">About</a>
-            <a th:href="@{/contact}">Contact</a>
-        </div>
-        <div class="nav-actions">
-            <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:10px;">
-                <span class="nav-user" sec:authentication="name"></span>
-                <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
-                <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
-            </div>
-            <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:10px;">
-                <a th:href="@{/login}" class="btn-nav-login">Login</a>
-                <a th:href="@{/register}" class="btn-nav-register">Book Now</a>
-            </div>
-        </div>
-        <button class="nav-hamburger" onclick="toggleMobileMenu()">
-            <span></span><span></span><span></span>
-        </button>
-    </div>
-    <div class="nav-mobile" id="mobileMenu">
-        <a th:href="@{/}">Home</a>
-        <a th:href="@{/bookings}">Bookings</a>
-        <a th:href="@{/about}">About</a>
-        <a th:href="@{/contact}">Contact</a>
-    </div>
-</nav>
+<title>Book a Trip — AJ Transportation</title>
 
-<div class="bookings-page">
+<main>
+  <div class="bookings-page">
 
-    <!-- PAGE HEADER -->
+    <!-- Page Header -->
     <div class="bookings-header">
-        <div class="container">
-            <div class="bh-inner">
-                <div>
-                    <div class="breadcrumb">
-                        <a href="/">Home</a>
-                        <span>›</span>
-                        <span>Bookings</span>
-                    </div>
-                    <h1>Book a Trip</h1>
-                    <p>Select an available time slot below. Green = available, red = already booked.</p>
-                </div>
-                <div class="bh-legend">
-                    <div class="legend-item"><span class="legend-dot dot-available"></span> Available</div>
-                    <div class="legend-item"><span class="legend-dot dot-booked"></span> Booked</div>
-                    <div class="legend-item"><span class="legend-dot dot-pending"></span> Pending</div>
-                </div>
-            </div>
-        </div>
+      <h1>Book Your Trip</h1>
+      <p>Browse available slots and book up to a year in advance.</p>
     </div>
 
-    <div class="container bookings-body">
+    <!-- Success / Error flash messages -->
+    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
 
-        <!-- CALENDAR PANEL -->
-        <div class="calendar-panel">
+    <!-- Week navigation -->
+    <div class="week-nav">
+      <!-- Disable Prev if we're already on the current week -->
+      <a th:href="@{/bookings(week=${prevWeek})}"
+         th:classappend="${prevWeek.isBefore(#temporals.createNow().toLocalDate().with(T(java.time.DayOfWeek).MONDAY))} ? 'btn-disabled' : ''"
+         class="btn btn-secondary week-nav-btn">
+        ← Previous Week
+      </a>
 
-            <!-- WEEK NAVIGATOR -->
-            <div class="calendar-wrapper">
-                <div class="calendar-header">
-                    <div class="calendar-title" id="weekRangeLabel">Loading...</div>
-                    <div class="calendar-nav">
-                        <button class="cal-nav-btn" onclick="changeWeek(-1)" title="Previous week">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-                        </button>
-                        <button class="cal-month-badge" onclick="goToToday()">Today</button>
-                        <button class="cal-nav-btn" onclick="changeWeek(1)" title="Next week">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                        </button>
-                        <!-- Month/Year jump -->
-                        <select id="monthJump" onchange="jumpToMonth(this.value)" class="month-jump-select">
-                        </select>
-                    </div>
-                </div>
+      <span class="week-label"
+            th:text="${#temporals.format(weekStart, 'dd MMM')} + ' – ' + ${#temporals.format(weekEnd, 'dd MMM yyyy')}">
+      </span>
 
-                <!-- WEEKLY GRID -->
-                <div class="week-scroll-wrap">
-                    <div class="week-view-grid" id="weekGrid">
-                        <!-- Column headers: blank + 7 days -->
-                        <div class="week-day-header time-label-col"></div>
-                        <!-- Day headers injected by JS -->
-                        <div class="week-day-header" id="hdr-0"></div>
-                        <div class="week-day-header" id="hdr-1"></div>
-                        <div class="week-day-header" id="hdr-2"></div>
-                        <div class="week-day-header" id="hdr-3"></div>
-                        <div class="week-day-header" id="hdr-4"></div>
-                        <div class="week-day-header" id="hdr-5"></div>
-                        <div class="week-day-header" id="hdr-6"></div>
-
-                        <!-- Time rows: 06:00 — 19:00 injected by JS -->
-                        <div id="timeRows"></div>
-                    </div>
-                </div>
-
-            </div>
-
-        </div>
-
-        <!-- BOOKING MODAL (hidden by default) -->
-        <div class="booking-modal-overlay" id="bookingModal" onclick="closeModal(event)">
-            <div class="booking-modal">
-                <div class="modal-header">
-                    <h3>Confirm Booking</h3>
-                    <button onclick="closeBookingModal()" class="modal-close">✕</button>
-                </div>
-                <div class="modal-body">
-                    <div class="modal-trip-info" id="modalTripInfo">
-                        <!-- Filled by JS -->
-                    </div>
-                    <div class="modal-notice" sec:authorize="isAnonymous()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        You need to <a th:href="@{/login}">log in</a> or <a th:href="@{/register}">register</a> to book this trip.
-                    </div>
-                    <div sec:authorize="isAuthenticated()">
-                        <p class="modal-confirm-text">You are about to book this trip. Payment will be collected via Ozow EFT after confirmation.</p>
-                        <div class="modal-price-row">
-                            <span>Trip Fee</span>
-                            <span class="modal-price" id="modalPrice">R —</span>
-                        </div>
-                        <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:16px;" onclick="confirmBooking()">
-                            Proceed to Payment
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- UPCOMING TRIPS LIST (Below Calendar) -->
-        <div class="upcoming-section">
-            <div class="table-header">
-                <span class="table-title">This Week's Trips</span>
-                <span style="font-size:0.8rem;color:var(--text-muted);" id="weekSummary">Loading...</span>
-            </div>
-            <div class="upcoming-list" id="upcomingList">
-                <!-- Populated by JS / Thymeleaf -->
-                <div class="upcoming-empty">
-                    <div style="font-size:2rem;margin-bottom:12px;">📅</div>
-                    <p>No trips scheduled this week yet.</p>
-                    <p style="font-size:0.8rem;color:var(--text-muted);">Check back soon or contact the admin.</p>
-                </div>
-            </div>
-        </div>
-
+      <!-- Disable Next if we've reached 1 year out -->
+      <a th:href="@{/bookings(week=${nextWeek})}"
+         th:classappend="${nextWeek.isAfter(maxWeek)} ? 'btn-disabled' : ''"
+         class="btn btn-secondary week-nav-btn">
+        Next Week →
+      </a>
     </div>
-</div>
 
-<!-- FOOTER -->
-<footer class="footer">
-    <div class="footer-container">
-        <div class="footer-brand">
-            <div class="footer-logo">
-                <div class="logo-aj">AJ</div>
-                <span class="logo-text">Transportation</span>
-            </div>
-            <p>Reliable transport services tailored to your schedule.</p>
-            <div class="footer-social">
-                <a href="#" class="social-link" aria-label="Facebook">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-                </a>
-                <a href="#" class="social-link" aria-label="Instagram">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
-                </a>
-            </div>
-        </div>
-        <div class="footer-links"><h4>Quick Links</h4><a th:href="@{/}">Home</a><a th:href="@{/bookings}">Book a Trip</a><a th:href="@{/about}">About</a><a th:href="@{/contact}">Contact</a></div>
-        <div class="footer-links"><h4>Account</h4><a th:href="@{/register}">Register</a><a th:href="@{/login}">Login</a><a th:href="@{/dashboard}">My Bookings</a></div>
-        <div class="footer-contact"><h4>Contact Us</h4><p>📞 +27 XX XXX XXXX</p><p>✉️ info@ajtransportation.co.za</p></div>
+    <!-- Calendar Legend -->
+    <div class="calendar-legend">
+      <span class="legend-item"><span class="dot dot-available"></span> Available</span>
+      <span class="legend-item"><span class="dot dot-booked"></span> Booked</span>
     </div>
-    <div class="footer-bottom"><p>© 2026 AJ Transportation. All rights reserved.</p></div>
-</footer>
 
-<script th:src="@{/js/main.js}"></script>
-<script th:src="@{/js/calendar.js}"></script>
-</body>
+    <!-- Login prompt for guests -->
+    <div sec:authorize="isAnonymous()" class="info-banner">
+      <p>🔒 <a href="/login">Log in</a> or <a href="/register">register</a> to book a slot.</p>
+    </div>
+
+    <!-- Calendar container — calendar.js renders slots here -->
+    <div id="calendar-container" class="calendar-container">
+      <!-- Slots are rendered by calendar.js using the tripsJson variable below -->
+    </div>
+
+    <!-- Booking form (hidden by default, shown by calendar.js when user clicks a slot) -->
+    <div id="booking-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Confirm Booking</h2>
+        <div id="booking-details"></div>
+
+        <sec:authorize access="isAuthenticated()">
+          <form id="booking-form" action="/bookings/book" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+            <input type="hidden" id="tripIdInput" name="tripId" value="" />
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary">Confirm Booking</button>
+              <button type="button" class="btn btn-secondary" onclick="closeBookingModal()">Cancel</button>
+            </div>
+          </form>
+        </sec:authorize>
+
+        <sec:authorize access="isAnonymous()">
+          <p class="modal-login-prompt">Please <a href="/login">log in</a> to confirm this booking.</p>
+          <button type="button" class="btn btn-secondary" onclick="closeBookingModal()">Close</button>
+        </sec:authorize>
+
+      </div>
+    </div>
+
+    <!-- Overlay backdrop for modal -->
+    <div id="modal-backdrop" class="modal-backdrop hidden" onclick="closeBookingModal()"></div>
+
+  </div>
+
+  <!--
+    Pass real trip data from the server into JavaScript.
+    Thymeleaf writes the JSON string directly into the script so calendar.js can use it.
+    The th:utext is intentional — the JSON is already escaped by the ObjectMapper.
+  -->
+  <script th:inline="javascript">
+    const TRIPS_DATA = /*[[${tripsJson}]]*/ '[]';
+    const WEEK_START = /*[[${weekStart}]]*/ '';
+  </script>
+
+  <script src="/js/calendar.js"></script>
+</main>
+
 </html>
