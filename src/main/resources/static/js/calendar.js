@@ -61,14 +61,25 @@ document.addEventListener('DOMContentLoaded', function () {
     // Day columns — one per day
     days.forEach(day => {
         const dateStr = formatDate(day); // 'yyyy-MM-dd'
-        const dayTrips = trips.filter(t => t.date === dateStr);
+        const dayTrips = trips.filter(t => {
+        const tripDate = Array.isArray(t.date)
+            ? `${t.date[0]}-${String(t.date[1]).padStart(2,'0')}-${String(t.date[2]).padStart(2,'0')}`
+            : t.date;
+        return tripDate === dateStr;
+    });
 
         html += `<div class="cal-day-column" data-date="${dateStr}">`;
 
         // Show each trip slot as a card in the correct position
         dayTrips.forEach(trip => {
-            const startMinutes = timeToMinutes(trip.startTime); // minutes from midnight
-            const endMinutes = timeToMinutes(trip.endTime);
+            const startTimeStr = Array.isArray(trip.startTime)
+                ? `${String(trip.startTime[0]).padStart(2,'0')}:${String(trip.startTime[1]).padStart(2,'0')}`
+                : trip.startTime;
+            const endTimeStr = Array.isArray(trip.endTime)
+                ? `${String(trip.endTime[0]).padStart(2,'0')}:${String(trip.endTime[1]).padStart(2,'0')}`
+                : trip.endTime;
+            const startMinutes = timeToMinutes(startTimeStr);
+            const endMinutes = timeToMinutes(endTimeStr);
             const calendarStartMinutes = 4 * 60; // 04:00 in minutes
 
             // Calculate position and height within the 04:00–12:00 window (480 min total)
@@ -83,9 +94,9 @@ document.addEventListener('DOMContentLoaded', function () {
             html += `
                 <div class="trip-slot ${statusClass}"
                      style="top: ${topPercent}%; height: ${heightPercent}%; min-height: 40px;"
-                     ${isClickable ? `onclick="openBookingModal('${trip.id}', '${trip.label}', '${trip.startTime}', '${trip.endTime}', '${trip.date}', '${trip.fee ?? ''}')"` : ''}
+                     ${isClickable ? `onclick="openBookingModal('${trip.id}', '${trip.label}', '${Array.isArray(trip.startTime) ? String(trip.startTime[0]).padStart(2,'0')+':'+String(trip.startTime[1]).padStart(2,'0') : trip.startTime}', '${Array.isArray(trip.endTime) ? String(trip.endTime[0]).padStart(2,'0')+':'+String(trip.endTime[1]).padStart(2,'0') : trip.endTime}', '${Array.isArray(trip.date) ? trip.date[0]+'-'+String(trip.date[1]).padStart(2,'0')+'-'+String(trip.date[2]).padStart(2,'0') : trip.date}', '${trip.fee ?? ''}')"` : ''}
                      title="${trip.label}">
-                    <span class="slot-time">${formatTime(trip.startTime)}</span>
+                    <span class="slot-time">${formatTime(startTimeStr)}</span>
                     <span class="slot-label">${trip.label || ''}</span>
                     ${trip.fee ? `<span class="slot-fee">R${parseFloat(trip.fee).toFixed(2)}</span>` : ''}
                     ${trip.status === 'BOOKED' ? '<span class="slot-status-tag">Booked</span>' : ''}
