@@ -6,7 +6,6 @@ import com.ajtransportation.app.model.User;
 import com.ajtransportation.app.repository.BookingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -97,5 +96,16 @@ public class BookingService {
                 .stream()
                 .filter(b -> "CONFIRMED".equals(b.getStatus()) || "PENDING".equals(b.getStatus()))
                 .count();
+    }
+
+    // Cancel a booking by trip ID — used by admin dashboard
+    @Transactional
+    public void cancelBookingByTripId(UUID tripId) {
+        bookingRepository.findByTripIdAndStatusNot(tripId, "CANCELLED")
+            .ifPresent(booking -> {
+                booking.setStatus("CANCELLED");
+                bookingRepository.save(booking);
+                tripService.updateTripStatus(tripId, "AVAILABLE");
+            });
     }
 }

@@ -82,4 +82,9 @@ public class TripService {
         Trip trip = getTripById(id);
         return "AVAILABLE".equals(trip.getStatus());
     }
+
+    // Fetch all trips between any two dates — used by admin month view
+    public List<Trip> getTripsForRange(LocalDate from, LocalDate to) {
+        return tripRepository.findByDateBetween(from, to);
+    }
 }

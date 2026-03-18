@@ -16,4 +16,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     // Check if a trip already has an active booking
     boolean existsByTripIdAndStatusNot(UUID tripId, String status);
+
+    // Find the active booking for a specific trip (used by admin cancel)
+    java.util.Optional<Booking> findByTripIdAndStatusNot(UUID tripId, String status);
 }
