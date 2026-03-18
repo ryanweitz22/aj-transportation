@@ -123,13 +123,10 @@
 | `about.html` | `src/main/resources/templates/` |
 | `contact.html` | `src/main/resources/templates/` |
 | `bookings.html` | `src/main/resources/templates/user/` |
-| `base.html` | `src/main/resources/templates/layout/` |
 | `style.css` | `src/main/resources/static/css/` |
 | `bookings.css` | `src/main/resources/static/css/` |
 | `main.js` | `src/main/resources/static/js/` |
 | `calendar.js` | `src/main/resources/static/js/` |
-| `SecurityConfig.java` | `src/main/java/com/ajtransportation/app/config/` |
-| `PageController.java` | `src/main/java/com/ajtransportation/app/controller/` |
 
 ### Phase 4 — Database Tables + Java Models: ✅ COMPLETE
 
@@ -146,10 +143,11 @@
 - `Booking.java`
 - `Payment.java`
 - `PricingConfig.java`
+- `RegisterRequest.java` — form validation DTO (added Phase 5)
 
 **Repository interfaces created (`repository/`):**
 - `UserRepository.java` — findByEmail, findByUsername, existsByEmail, existsByUsername
-- `TripRepository.java` — findByDate, findByDateBetween, findByDateBetweenAndStatus
+- `TripRepository.java` — findByDate, findByDateBetween, findByDateBetweenAndStatus, findByStatus
 - `BookingRepository.java` — findByUser, findByUserOrderByCreatedAtDesc, existsByTripIdAndStatusNot
 - `PaymentRepository.java` — findByOzowReference, findByBookingId
 - `PricingConfigRepository.java` — use findById(1) for single config row
@@ -161,6 +159,7 @@
 | File | Location |
 |---|---|
 | `AuthController.java` | `src/main/java/com/ajtransportation/app/controller/` |
+| `PageController.java` | `src/main/java/com/ajtransportation/app/controller/` (updated) |
 | `UserService.java` | `src/main/java/com/ajtransportation/app/service/` |
 | `CustomUserDetailsService.java` | `src/main/java/com/ajtransportation/app/service/` |
 | `RegisterRequest.java` | `src/main/java/com/ajtransportation/app/model/` |
@@ -170,16 +169,17 @@
 | `dashboard.html` | `src/main/resources/templates/user/` |
 
 **What works after Phase 5:**
-- `/register` — form with email, username, password, confirm password
-- `/login` — Spring Security form login with email + password
-- `/dashboard` — logged-in users see their bookings (empty for now)
+- `/register` — form with email, username, password, confirm password. Validates duplicates.
+- `/login` — Spring Security form login using email + password
+- `/dashboard` — logged-in users see their account info (bookings section shows 0 — Phase 6)
 - `/logout` — clears session, redirects to homepage
-- Passwords stored as BCrypt hashes (never plain text)
+- Passwords stored as BCrypt hashes — never plain text
 - Duplicate email/username validation on registration
 - Role-based access: USER vs ADMIN routes protected
-- Navbar shows correct buttons based on login state
+- Navbar shows correct buttons based on login state (via `sec:authorize`)
+- Admin user created directly in Supabase via SQL + bcrypt-generator.com
 
-### Phase 6 — Booking Calendar Backend: ⬜ TODO
+### Phase 6 — Admin Trip Creation + Calendar Backend: ⬜ NEXT
 ### Phase 7 — Admin Dashboard + Slot Blocking: ⬜ TODO
 ### Phase 8 — Google Maps + Price-Per-Km Algorithm: ⬜ TODO
 ### Phase 9 — Ozow Payment Integration: ⬜ TODO
@@ -197,56 +197,55 @@ aj-transportation/
 │
 ├── src/main/java/com/ajtransportation/app/
 │   ├── config/
-│   │   └── SecurityConfig.java          ✅ Updated for Phase 5 — login/register routes
+│   │   └── SecurityConfig.java             ✅ Phase 5 — login/register/admin routes, BCrypt bean
 │   ├── controller/
-│   │   ├── PageController.java          ✅ Maps / /about /contact /bookings
-│   │   └── AuthController.java          ✅ Handles /register POST, /dashboard GET
+│   │   ├── PageController.java              ✅ Maps / /about /contact /bookings (handles logout param)
+│   │   └── AuthController.java             ✅ /login GET, /register GET+POST, /dashboard GET
 │   ├── model/
-│   │   ├── User.java                    ✅ Phase 4
-│   │   ├── Trip.java                    ✅ Phase 4
-│   │   ├── Booking.java                 ✅ Phase 4
-│   │   ├── Payment.java                 ✅ Phase 4
-│   │   ├── PricingConfig.java           ✅ Phase 4
-│   │   └── RegisterRequest.java         ✅ Phase 5 — form validation DTO
+│   │   ├── User.java                        ✅ Phase 4
+│   │   ├── Trip.java                        ✅ Phase 4
+│   │   ├── Booking.java                     ✅ Phase 4
+│   │   ├── Payment.java                     ✅ Phase 4
+│   │   ├── PricingConfig.java               ✅ Phase 4
+│   │   └── RegisterRequest.java             ✅ Phase 5 — form validation DTO
 │   ├── repository/
-│   │   ├── UserRepository.java          ✅ Phase 4
-│   │   ├── TripRepository.java          ✅ Phase 4
-│   │   ├── BookingRepository.java       ✅ Phase 4
-│   │   ├── PaymentRepository.java       ✅ Phase 4
-│   │   └── PricingConfigRepository.java ✅ Phase 4
+│   │   ├── UserRepository.java              ✅ Phase 4
+│   │   ├── TripRepository.java              ✅ Phase 4
+│   │   ├── BookingRepository.java           ✅ Phase 4
+│   │   ├── PaymentRepository.java           ✅ Phase 4
+│   │   └── PricingConfigRepository.java     ✅ Phase 4
 │   ├── service/
-│   │   ├── UserService.java             ✅ Phase 5 — register logic, BCrypt
-│   │   └── CustomUserDetailsService.java ✅ Phase 5 — Spring Security login
-│   └── AppApplication.java              ✅ Working
+│   │   ├── UserService.java                 ✅ Phase 5 — register logic, BCrypt encoding
+│   │   └── CustomUserDetailsService.java    ✅ Phase 5 — Spring Security login by email
+│   └── AppApplication.java                  ✅ Working
 │
 ├── src/main/resources/
 │   ├── templates/
-│   │   ├── index.html                   ✅ Homepage
-│   │   ├── about.html                   ✅ About page
-│   │   ├── contact.html                 ✅ Contact page
+│   │   ├── index.html                       ✅ Homepage
+│   │   ├── about.html                       ✅ About page
+│   │   ├── contact.html                     ✅ Contact page (form present, POST not wired yet)
 │   │   ├── auth/
-│   │   │   ├── login.html               ✅ Phase 5
-│   │   │   └── register.html            ✅ Phase 5
+│   │   │   ├── login.html                   ✅ Phase 5
+│   │   │   └── register.html                ✅ Phase 5
 │   │   ├── user/
-│   │   │   ├── bookings.html            ✅ Booking calendar (frontend only)
-│   │   │   └── dashboard.html           ✅ Phase 5 — user dashboard
-│   │   ├── admin/                       ⬜ Phase 7
-│   │   └── layout/
-│   │       └── base.html                ✅ Shared layout
+│   │   │   ├── bookings.html                ✅ Calendar UI (uses SAMPLE_TRIPS dummy data — Phase 6 connects DB)
+│   │   │   └── dashboard.html               ✅ Phase 5 — shows username, email, role badge
+│   │   ├── admin/                           ⬜ Phase 6/7 — empty folder
+│   │   └── layout/                          ⬜ base.html not yet used
 │   ├── static/
 │   │   ├── css/
-│   │   │   ├── style.css                ✅ Main styles
-│   │   │   └── bookings.css             ✅ Calendar styles
+│   │   │   ├── style.css                    ✅ Main styles (includes .form-input-error)
+│   │   │   └── bookings.css                 ✅ Calendar-specific styles
 │   │   ├── js/
-│   │   │   ├── main.js                  ✅ Navbar + animations
-│   │   │   └── calendar.js              ✅ Weekly calendar logic
-│   │   └── images/                      ⬜ Awaiting assets from Uncle Ajmal
-│   ├── application.properties           ✅ Committed to GitHub
-│   └── application-local.properties     ✅ Local only — GITIGNORED
+│   │   │   ├── main.js                      ✅ Navbar toggle, scroll shadow, scroll animations, alert dismiss
+│   │   │   └── calendar.js                  ✅ Weekly calendar logic — SAMPLE_TRIPS replaced in Phase 6
+│   │   └── images/                          ⬜ Awaiting assets from Uncle Ajmal
+│   ├── application.properties               ✅ Committed to GitHub
+│   └── application-local.properties         ✅ Local only — GITIGNORED
 │
-├── pom.xml                              ✅ All dependencies
-├── .gitignore                           ✅ Protects secrets
-└── README.md                            ✅ Professional readme
+├── pom.xml                                  ✅ All dependencies
+├── .gitignore                               ✅ Protects secrets
+└── README.md                                ✅ Professional readme
 ```
 
 ---
@@ -375,114 +374,27 @@ postgresql (runtime)
 |---|---|---|
 | `/` | ✅ Built | ❌ Public |
 | `/about` | ✅ Built | ❌ Public |
-| `/contact` | ✅ Built | ❌ Public |
-| `/bookings` | ✅ Built (frontend only) | ❌ Public |
+| `/contact` | ✅ Built (form not wired) | ❌ Public |
+| `/bookings` | ✅ Built (dummy data) | ❌ Public |
 | `/login` | ✅ Phase 5 | ❌ Public |
 | `/register` | ✅ Phase 5 | ❌ Public |
 | `/dashboard` | ✅ Phase 5 | ✅ Logged in |
 | `/logout` | ✅ Phase 5 | ✅ Logged in |
-| `/admin/dashboard` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/trips` | ⬜ Phase 7 | ✅ ADMIN only |
-| `/admin/slots/block` | ⬜ Phase 7 | ✅ ADMIN only |
+| `/admin/dashboard` | ⬜ Phase 6/7 | ✅ ADMIN only |
+| `/admin/trips/new` | ⬜ Phase 6 | ✅ ADMIN only |
+| `/admin/trips/block` | ⬜ Phase 7 | ✅ ADMIN only |
 | `/admin/pricing` | ⬜ Phase 8 | ✅ ADMIN only |
 | `/api/price-estimate` | ⬜ Phase 8 | ❌ Public API |
 
 ---
 
-## 🔐 SecurityConfig.java (Phase 5 — Updated)
+## ⚠️ Known Gaps / Notes for Next Session
 
-```java
-package com.ajtransportation.app.config;
-
-import com.ajtransportation.app.service.CustomUserDetailsService;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.SecurityFilterChain;
-
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-
-    private final CustomUserDetailsService userDetailsService;
-
-    public SecurityConfig(CustomUserDetailsService userDetailsService) {
-        this.userDetailsService = userDetailsService;
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
-                .requestMatchers("/", "/about", "/contact", "/bookings").permitAll()
-                .requestMatchers("/login", "/register").permitAll()
-                .requestMatchers("/admin/**").hasRole("ADMIN")
-                .requestMatchers("/dashboard").authenticated()
-                .anyRequest().authenticated()
-            )
-            .formLogin(form -> form
-                .loginPage("/login")
-                .loginProcessingUrl("/login")
-                .defaultSuccessUrl("/dashboard", true)
-                .failureUrl("/login?error=true")
-                .permitAll()
-            )
-            .logout(logout -> logout
-                .logoutUrl("/logout")
-                .logoutSuccessUrl("/?logout=true")
-                .invalidateHttpSession(true)
-                .deleteCookies("JSESSIONID")
-                .permitAll()
-            )
-            .userDetailsService(userDetailsService);
-
-        return http.build();
-    }
-}
-```
-
----
-
-## 🔐 Current PageController.java
-
-```java
-package com.ajtransportation.app.controller;
-
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-
-@Controller
-public class PageController {
-
-    @GetMapping("/")
-    public String home() { return "index"; }
-
-    @GetMapping("/about")
-    public String about() { return "about"; }
-
-    @GetMapping("/contact")
-    public String contact() { return "contact"; }
-
-    @GetMapping("/bookings")
-    public String bookings() { return "user/bookings"; }
-}
-```
+- `contact.html` has a form with a POST to `/contact` but no controller handles it yet — submitting will error. Wire up in a later phase or ignore until Phase 10.
+- `calendar.js` still uses `SAMPLE_TRIPS` dummy data — Phase 6 replaces this with real DB data.
+- `dashboard.html` stat cards show hardcoded `0` — Phase 6 wires up real booking counts.
+- `admin/` templates folder is empty — Phase 6/7 builds this out.
+- `layout/base.html` exists in folder structure but is not currently used by any template (each page is self-contained with its own navbar/footer).
 
 ---
 
@@ -493,8 +405,8 @@ public class PageController {
 - [ ] Photos of clients / trips (for homepage)
 - [ ] Exact rate per km he charges (e.g. R8.50/km)
 - [ ] Minimum fare amount (if any)
-- [ ] Confirmation of which days/times to block by default (e.g. every Friday 12:00–14:00)
-- [ ] Any other features he wants added
+- [ ] Which days/times to block by default (e.g. every Friday 12:00–14:00)
+- [ ] Any additional features he wants
 
 ---
 
@@ -521,23 +433,27 @@ public class PageController {
 
 ## 📌 What To Do Next — Phase 6
 
-**Goal:** Connect the booking calendar to real database data.
+**Goal:** Build admin trip creation and connect the booking calendar to real database data.
 
-**Step 1 — TripService.java:**
-- `getTripsForWeek(LocalDate weekStart)` — fetch trips from DB for a 7-day range
+**Step 1 — TripService.java** (new file in `service/`):
+- `createTrip(...)` — save a new trip to the DB
+- `getTripsForWeek(LocalDate weekStart)` — fetch trips for a 7-day range
 - `getTripById(UUID id)` — fetch a single trip
 
-**Step 2 — BookingService.java:**
-- `createBooking(User user, UUID tripId)` — create booking + mark trip as BOOKED
-- `getUserBookings(User user)` — get all bookings for a user
+**Step 2 — AdminController.java** (new file in `controller/`):
+- GET `/admin/dashboard` — admin home page showing all trips
+- GET `/admin/trips/new` — show trip creation form
+- POST `/admin/trips/new` — save new trip, redirect back to dashboard
 
-**Step 3 — Update BookingsController.java:**
-- GET `/bookings` — pass real trip data to Thymeleaf template via model
-- POST `/bookings/book` — receive tripId, create booking, redirect to payment
+**Step 3 — Admin templates** (new files in `templates/admin/`):
+- `dashboard.html` — admin overview with trip list and stats
+- `new-trip.html` — form: date, start time, label, fee, pickup address, dropoff address
 
-**Step 4 — Update `bookings.html`:**
-- Replace JavaScript dummy data with Thymeleaf `th:each` loop over real trips
-- Pass trips as JSON to `calendar.js` for rendering
+**Step 4 — Update PageController:**
+- GET `/bookings` — fetch real trips from DB for current week, pass to Thymeleaf as a JSON string embedded in a `<script>` tag
 
-**Step 5 — Update `dashboard.html`:**
-- Show user's real bookings from DB in the upcoming trips list
+**Step 5 — Update `calendar.js`:**
+- Replace `SAMPLE_TRIPS` constant with trips read from the embedded JSON script tag
+
+**Step 6 — Update `dashboard.html` (user):**
+- Show real booking counts using `BookingRepository`
