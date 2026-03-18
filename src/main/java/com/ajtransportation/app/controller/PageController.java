@@ -23,7 +23,4 @@ public class PageController {
 
     @GetMapping("/contact")
     public String contact() { return "contact"; }
-
-    @GetMapping("/bookings")
-    public String bookings() { return "user/bookings"; }
 }
