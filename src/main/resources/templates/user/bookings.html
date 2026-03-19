@@ -206,7 +206,7 @@
                     </div>
                 </div>
 
-                <!-- STEP 2: Confirm -->
+                                                <!-- STEP 2: Confirm -->
                 <div id="book-step-2" class="hidden">
                     <div class="route-confirm-card">
                         <div class="route-row">
@@ -226,19 +226,31 @@
                         </div>
                     </div>
 
+                    <!-- Fare estimate card -->
+                    <div class="trip-detail-card" style="margin-bottom:12px;">
+                        <div class="booking-detail-row" style="border:none;padding:4px 0;">
+                            <span class="detail-label">Estimated Fare</span>
+                            <span id="book-confirm-fare" style="font-size:0.9rem;">Calculating...</span>
+                        </div>
+                    </div>
+
                     <div class="trip-detail-card"><div id="booking-details"></div></div>
 
-                    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0;">Your slot is reserved immediately. Payment via Ozow EFT will be collected separately.</p>
+                    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px;">
+                        Your booking is sent to the driver for approval. Payment is processed once the driver accepts.
+                    </p>
 
                     <form id="book-form" th:action="@{/bookings/book}" method="post">
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
                         <input type="hidden" id="tripIdInput"         name="tripId"         value="" />
                         <input type="hidden" id="book-pickup-hidden"  name="pickupAddress"  value="" />
                         <input type="hidden" id="book-dropoff-hidden" name="dropoffAddress" value="" />
+                        <input type="hidden" id="book-fare-hidden"    name="fare"           value="" />
                     </form>
 
                     <div class="modal-actions">
-                        <button type="button" class="btn btn-primary" onclick="document.getElementById('book-form').submit()">✓ Confirm Booking</button>
+                        <button type="button" id="book-confirm-btn" class="btn btn-primary"
+                                onclick="document.getElementById('book-form').submit()">Proceed to Payment</button>
                         <button type="button" class="btn btn-secondary" onclick="bookGoBack()">← Back</button>
                     </div>
                 </div>
