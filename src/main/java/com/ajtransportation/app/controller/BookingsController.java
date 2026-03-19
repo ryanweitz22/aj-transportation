@@ -28,16 +28,14 @@ public class BookingsController {
     private final TripService tripService;
     private final BookingService bookingService;
     private final UserService userService;
-    private final TripRequestService tripRequestService;
     private final BusinessHoursService businessHoursService;
 
     public BookingsController(TripService tripService, BookingService bookingService,
-                               UserService userService, TripRequestService tripRequestService,
+                               UserService userService,
                                BusinessHoursService businessHoursService) {
         this.tripService = tripService;
         this.bookingService = bookingService;
         this.userService = userService;
-        this.tripRequestService = tripRequestService;
         this.businessHoursService = businessHoursService;
     }
 
@@ -91,54 +89,14 @@ public class BookingsController {
 
         User user = userService.findByEmail(userDetails.getUsername());
         try {
-            Booking booking = bookingService.createBooking(user, tripId, pickupAddress, dropoffAddress);
+            bookingService.createBooking(user, tripId, pickupAddress, dropoffAddress);
             ra.addFlashAttribute("successMessage",
-                "Booking confirmed! Ref: " + booking.getId().toString().substring(0,8).toUpperCase()
-                + " — From: " + pickupAddress + " → " + dropoffAddress);
+                "Booking submitted! Your driver will confirm shortly.");
             return "redirect:/dashboard";
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
             return "redirect:/bookings";
         }
-    }
-
-    @PostMapping("/bookings/request")
-    public String requestTrip(
-            @RequestParam("requestedDate")      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate requestedDate,
-            @RequestParam("requestedStartTime") String requestedStartTime,
-            @RequestParam("pickupAddress")      String pickupAddress,
-            @RequestParam("dropoffAddress")     String dropoffAddress,
-            @RequestParam(value = "additionalNotes", required = false) String additionalNotes,
-            @AuthenticationPrincipal UserDetails userDetails,
-            RedirectAttributes ra) {
-
-        User user = userService.findByEmail(userDetails.getUsername());
-
-        if (requestedDate.isBefore(businessHoursService.minBookingDate())) {
-            ra.addFlashAttribute("errorMessage", "Cannot request a trip in the past.");
-            return "redirect:/bookings";
-        }
-        if (requestedDate.isAfter(businessHoursService.maxBookingDate())) {
-            ra.addFlashAttribute("errorMessage", "Cannot book more than 1 year in advance.");
-            return "redirect:/bookings";
-        }
-
-        LocalTime startTime;
-        try { startTime = LocalTime.parse(requestedStartTime); }
-        catch (Exception e) { ra.addFlashAttribute("errorMessage", "Invalid time."); return "redirect:/bookings"; }
-
-        if (!businessHoursService.isWithinBusinessHours(requestedDate, startTime)) {
-            ra.addFlashAttribute("errorMessage", "That time is outside our business hours.");
-            return "redirect:/bookings";
-        }
-
-        try {
-            tripRequestService.createRequest(user, requestedDate, startTime, pickupAddress, dropoffAddress, additionalNotes);
-            ra.addFlashAttribute("successMessage", "Trip request submitted! We will confirm via email.");
-        } catch (RuntimeException e) {
-            ra.addFlashAttribute("errorMessage", e.getMessage());
-        }
-        return "redirect:/dashboard";
     }
 
     @PostMapping("/bookings/cancel/{id}")
