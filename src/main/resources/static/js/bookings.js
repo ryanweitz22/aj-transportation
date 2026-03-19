@@ -1,6 +1,6 @@
 /**
  * bookings.js — AJ Transportation
- * 2-step booking modal with live fare calculation via Google Maps Distance Matrix.
+ * 2-step booking modal with live fare calculation.
  */
 
 // ── Google Places Autocomplete ────────────────────────────────────────────────
@@ -41,46 +41,42 @@ async function bookStep1Next() {
     if (!pickup)  { showInputError('book-pickup',  'Please enter a pickup address.'); return; }
     if (!dropoff) { showInputError('book-dropoff', 'Please enter a dropoff address.'); return; }
 
-    // Copy to hidden fields
     document.getElementById('book-pickup-hidden').value  = pickup;
     document.getElementById('book-dropoff-hidden').value = dropoff;
-
-    // Update confirm display
     document.getElementById('book-confirm-pickup').textContent  = pickup;
     document.getElementById('book-confirm-dropoff').textContent = dropoff;
 
-    // Show loading state on fare while we calculate
-    const fareEl = document.getElementById('book-confirm-fare');
-    if (fareEl) fareEl.textContent = 'Calculating...';
-
-    // Move to step 2 immediately so user sees the screen
+    // Move to step 2 immediately
     setStep('book', 2);
     document.getElementById('booking-modal-title').textContent = 'Your Trip';
 
-    // Disable confirm button while calculating
+    // Show calculating state
+    const fareEl    = document.getElementById('book-confirm-fare');
     const confirmBtn = document.getElementById('book-confirm-btn');
+    if (fareEl)     fareEl.textContent = 'Calculating...';
     if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Calculating fare...'; }
 
-    // Call backend to calculate fare
+    // Fetch fare from backend
     try {
-        const res = await fetch(`/bookings/calculate-fare?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}`);
+        const res  = await fetch(`/bookings/calculate-fare?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}`);
         const data = await res.json();
 
         if (data.success) {
             const fareFormatted = `R${parseFloat(data.fare).toFixed(2)}`;
-            const distFormatted = `${data.distanceKm} km`;
-            if (fareEl) fareEl.innerHTML = `<strong style="color:var(--primary);font-size:1.1rem;">${fareFormatted}</strong> <span style="color:var(--text-muted);font-size:0.8rem;">(${distFormatted} × R8/km, min R50)</span>`;
-            // Store fare in hidden field
+            if (fareEl) fareEl.innerHTML = `<strong style="color:var(--primary);font-size:1.05rem;">${fareFormatted}</strong>`;
+            // Update the fare row in the trip details card too
+            const fareDetailEl = document.getElementById('booking-fare-detail');
+            if (fareDetailEl) fareDetailEl.textContent = fareFormatted;
+            // Store fare
             const fareInput = document.getElementById('book-fare-hidden');
             if (fareInput) fareInput.value = data.fare;
         } else {
-            if (fareEl) fareEl.innerHTML = `<span style="color:var(--text-muted);">Fare will be confirmed by driver</span>`;
+            if (fareEl) fareEl.innerHTML = `<span style="color:var(--text-muted);">To be confirmed by driver</span>`;
         }
     } catch (e) {
-        if (fareEl) fareEl.innerHTML = `<span style="color:var(--text-muted);">Fare will be confirmed by driver</span>`;
+        if (fareEl) fareEl.innerHTML = `<span style="color:var(--text-muted);">To be confirmed by driver</span>`;
     }
 
-    // Re-enable confirm button
     if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Proceed to Payment'; }
 }
 
@@ -156,9 +152,7 @@ function showInputError(inputId, message) {
 
 // ── Backdrop + Escape ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    ['booking-modal'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('click', e => { if (e.target === el) closeAllModals(); });
-    });
+    const el = document.getElementById('booking-modal');
+    if (el) el.addEventListener('click', e => { if (e.target === el) closeAllModals(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllModals(); });
 });

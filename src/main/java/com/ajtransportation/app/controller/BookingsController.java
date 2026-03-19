@@ -75,7 +75,7 @@ public class BookingsController {
 
     /**
      * GET /bookings/calculate-fare
-     * Called by JS to calculate fare from pickup + dropoff before user confirms.
+     * Called by JS on step 1 → step 2 transition to show fare before confirming.
      */
     @GetMapping("/bookings/calculate-fare")
     @ResponseBody
@@ -91,11 +91,9 @@ public class BookingsController {
                 result.put("error",   "Could not calculate fare. The driver will confirm your fare.");
                 return result;
             }
-            // R8/km minimum R50 — same logic as admin pricing
-            java.math.BigDecimal rate       = java.math.BigDecimal.valueOf(8.0);
+            java.math.BigDecimal rate        = java.math.BigDecimal.valueOf(8.0);
             java.math.BigDecimal minimumFare = java.math.BigDecimal.valueOf(50.0);
-            java.math.BigDecimal fare       = googleMapsService.calculateFee(dr.distanceKm, rate, minimumFare);
-
+            java.math.BigDecimal fare        = googleMapsService.calculateFee(dr.distanceKm, rate, minimumFare);
             result.put("success",    true);
             result.put("distanceKm", dr.distanceKm);
             result.put("fare",       fare);
@@ -106,12 +104,17 @@ public class BookingsController {
         return result;
     }
 
+    /**
+     * POST /bookings/book
+     * Handles both green slots (tripId present) and open slots (tripId blank).
+     */
     @PostMapping("/bookings/book")
     public String bookTrip(
-            @RequestParam("tripId")         String tripId,
+            @RequestParam(value = "tripId",        required = false) String tripId,
+            @RequestParam(value = "slotDate",      required = false) String slotDate,
+            @RequestParam(value = "slotTime",      required = false) String slotTime,
             @RequestParam("pickupAddress")  String pickupAddress,
             @RequestParam("dropoffAddress") String dropoffAddress,
-            @RequestParam(value = "fare", required = false) String fare,
             @AuthenticationPrincipal UserDetails userDetails,
             RedirectAttributes ra) {
 
@@ -125,12 +128,23 @@ public class BookingsController {
         }
 
         User user = userService.findByEmail(userDetails.getUsername());
+
         try {
-            // tripId may be null for open hour slots — pass null UUID in that case
-            UUID tripUUID = (tripId == null || tripId.isBlank()) ? null : UUID.fromString(tripId);
-            bookingService.createBooking(user, tripUUID, pickupAddress, dropoffAddress);
+            if (tripId != null && !tripId.isBlank()) {
+                // Green slot — existing admin-created trip
+                bookingService.createBooking(user, UUID.fromString(tripId), pickupAddress, dropoffAddress);
+            } else {
+                // Open slot — create trip on the fly
+                if (slotDate == null || slotTime == null) {
+                    ra.addFlashAttribute("errorMessage", "Invalid slot selection. Please try again.");
+                    return "redirect:/bookings";
+                }
+                LocalDate date      = LocalDate.parse(slotDate);
+                LocalTime startTime = LocalTime.parse(slotTime);
+                bookingService.createBookingForOpenSlot(user, date, startTime, pickupAddress, dropoffAddress);
+            }
             ra.addFlashAttribute("successMessage",
-                "Booking submitted! Your driver will confirm shortly.");
+                "Booking submitted! Your driver will review and confirm shortly.");
             return "redirect:/dashboard";
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
