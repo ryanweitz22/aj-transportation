@@ -72,10 +72,6 @@ public class BookingsController {
         return "user/bookings";
     }
 
-    /**
-     * POST /bookings/book
-     * Accepts pickupAddress + dropoffAddress — booking is immediately CONFIRMED.
-     */
     @PostMapping("/bookings/book")
     public String bookTrip(
             @RequestParam("tripId")         UUID tripId,
@@ -106,10 +102,6 @@ public class BookingsController {
         }
     }
 
-    /**
-     * POST /bookings/request
-     * Amber slot — user requests a custom trip. Goes to admin for review.
-     */
     @PostMapping("/bookings/request")
     public String requestTrip(
             @RequestParam("requestedDate")      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate requestedDate,
