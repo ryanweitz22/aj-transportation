@@ -72,15 +72,33 @@ public class BookingsController {
         return "user/bookings";
     }
 
+    /**
+     * POST /bookings/book
+     * Accepts pickupAddress + dropoffAddress — booking is immediately CONFIRMED.
+     */
     @PostMapping("/bookings/book")
-    public String bookTrip(@RequestParam("tripId") UUID tripId,
-                           @AuthenticationPrincipal UserDetails userDetails,
-                           RedirectAttributes ra) {
+    public String bookTrip(
+            @RequestParam("tripId")         UUID tripId,
+            @RequestParam("pickupAddress")  String pickupAddress,
+            @RequestParam("dropoffAddress") String dropoffAddress,
+            @AuthenticationPrincipal UserDetails userDetails,
+            RedirectAttributes ra) {
+
+        if (pickupAddress == null || pickupAddress.isBlank()) {
+            ra.addFlashAttribute("errorMessage", "Please enter a pickup location.");
+            return "redirect:/bookings";
+        }
+        if (dropoffAddress == null || dropoffAddress.isBlank()) {
+            ra.addFlashAttribute("errorMessage", "Please enter a dropoff location.");
+            return "redirect:/bookings";
+        }
+
         User user = userService.findByEmail(userDetails.getUsername());
         try {
-            Booking booking = bookingService.createBooking(user, tripId);
+            Booking booking = bookingService.createBooking(user, tripId, pickupAddress, dropoffAddress);
             ra.addFlashAttribute("successMessage",
-                "Booking confirmed! Ref: " + booking.getId().toString().substring(0,8).toUpperCase());
+                "Booking confirmed! Ref: " + booking.getId().toString().substring(0,8).toUpperCase()
+                + " — From: " + pickupAddress + " → " + dropoffAddress);
             return "redirect:/dashboard";
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
@@ -88,6 +106,10 @@ public class BookingsController {
         }
     }
 
+    /**
+     * POST /bookings/request
+     * Amber slot — user requests a custom trip. Goes to admin for review.
+     */
     @PostMapping("/bookings/request")
     public String requestTrip(
             @RequestParam("requestedDate")      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate requestedDate,
@@ -120,8 +142,7 @@ public class BookingsController {
 
         try {
             tripRequestService.createRequest(user, requestedDate, startTime, pickupAddress, dropoffAddress, additionalNotes);
-            ra.addFlashAttribute("successMessage",
-                "Trip request submitted! We will confirm via email.");
+            ra.addFlashAttribute("successMessage", "Trip request submitted! We will confirm via email.");
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
         }
