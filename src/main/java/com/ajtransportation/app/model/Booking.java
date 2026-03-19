@@ -20,16 +20,23 @@ public class Booking {
     @JoinColumn(name = "trip_id", nullable = false)
     private Trip trip;
 
-    @Column(nullable = false)
-    private String status = "PENDING";
+    // PENDING_APPROVAL → CONFIRMED (admin accepted) or REJECTED (admin rejected) or CANCELLED (user cancelled)
+    @Column(name = "status", nullable = false)
+    private String status;
 
     @Column(name = "payment_status", nullable = false)
-    private String paymentStatus = "UNPAID";
+    private String paymentStatus;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "pickup_address")
+    private String pickupAddress;
 
-    // ---- Getters & Setters ----
+    @Column(name = "dropoff_address")
+    private String dropoffAddress;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
+    // ── Getters & Setters ─────────────────────────────────────────────────────
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -45,6 +52,12 @@ public class Booking {
 
     public String getPaymentStatus() { return paymentStatus; }
     public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+
+    public String getPickupAddress() { return pickupAddress; }
+    public void setPickupAddress(String pickupAddress) { this.pickupAddress = pickupAddress; }
+
+    public String getDropoffAddress() { return dropoffAddress; }
+    public void setDropoffAddress(String dropoffAddress) { this.dropoffAddress = dropoffAddress; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
