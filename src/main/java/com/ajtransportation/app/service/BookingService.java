@@ -23,7 +23,7 @@ public class BookingService {
 
     /**
      * User books a trip.
-     * Trip immediately moves to PENDING_APPROVAL (amber) so no other user can grab it.
+     * Trip immediately moves to PENDING so no other user can grab it.
      * Booking status = PENDING_APPROVAL until admin accepts or rejects.
      */
     @Transactional
@@ -56,7 +56,7 @@ public class BookingService {
 
     /**
      * Admin accepts a booking.
-     * Trip moves to BOOKED. Payment trigger goes here in Phase 9.
+     * Trip moves to BOOKED. Payment triggered in Phase 9.
      */
     @Transactional
     public void acceptBooking(UUID bookingId) {
@@ -70,7 +70,7 @@ public class BookingService {
 
     /**
      * Admin rejects a booking.
-     * Slot goes back to AVAILABLE so another user can book it.
+     * Slot goes back to AVAILABLE.
      */
     @Transactional
     public void rejectBooking(UUID bookingId) {
@@ -81,7 +81,7 @@ public class BookingService {
     }
 
     /**
-     * User cancels their own booking before admin has responded.
+     * User cancels before admin responds.
      * Slot goes back to AVAILABLE.
      */
     @Transactional
@@ -101,6 +101,11 @@ public class BookingService {
                 bookingRepository.save(booking);
                 tripService.updateTripStatus(tripId, "AVAILABLE");
             });
+    }
+
+    // All bookings awaiting admin approval — for admin pending page
+    public List<Booking> getPendingBookings() {
+        return bookingRepository.findByStatusOrderByCreatedAtAsc("PENDING_APPROVAL");
     }
 
     public Booking getBookingById(UUID id) {
