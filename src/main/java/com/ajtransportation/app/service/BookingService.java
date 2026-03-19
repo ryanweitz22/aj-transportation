@@ -21,10 +21,13 @@ public class BookingService {
         this.tripService = tripService;
     }
 
-    // Create a new booking for a user on a given trip
-    // Returns the saved Booking, or throws if the trip is no longer available
+    /**
+     * Create a booking for a user on a given trip.
+     * Booking is immediately CONFIRMED — no pending state.
+     * Payment via Ozow will be handled in Phase 9.
+     */
     @Transactional
-    public Booking createBooking(User user, UUID tripId) {
+    public Booking createBooking(User user, UUID tripId, String pickupAddress, String dropoffAddress) {
         // Double-check the trip is still available (race condition protection)
         if (!tripService.isTripAvailable(tripId)) {
             throw new RuntimeException("Sorry, that slot is no longer available.");
@@ -32,32 +35,46 @@ public class BookingService {
 
         Trip trip = tripService.getTripById(tripId);
 
-        // Check this user hasn't already booked this same trip
+        // Ensure nobody else has already booked this trip
         boolean alreadyBooked = bookingRepository.existsByTripIdAndStatusNot(tripId, "CANCELLED");
         if (alreadyBooked) {
             throw new RuntimeException("This slot has already been booked.");
         }
 
-        // Create the booking record
+        // Build the booking — immediately CONFIRMED (payment is Phase 9)
         Booking booking = new Booking();
         booking.setUser(user);
         booking.setTrip(trip);
-        booking.setStatus("PENDING");         // Awaiting payment
+        booking.setStatus("CONFIRMED");
         booking.setPaymentStatus("UNPAID");
         booking.setCreatedAt(LocalDateTime.now());
 
-        // Mark the trip as BOOKED so no one else can grab it
+        // Store pickup/dropoff on the trip so admin can see the route
+        if (pickupAddress != null && !pickupAddress.isBlank()) {
+            trip.setPickupAddress(pickupAddress);
+        }
+        if (dropoffAddress != null && !dropoffAddress.isBlank()) {
+            trip.setDropoffAddress(dropoffAddress);
+        }
+
+        // Mark the trip as BOOKED so nobody else can grab it
         tripService.updateTripStatus(tripId, "BOOKED");
 
         return bookingRepository.save(booking);
     }
 
-    // Get all bookings for a specific user (newest first) — for user dashboard
+    // Backwards-compatible overload (used by admin private booking)
+    @Transactional
+    public Booking createBooking(User user, UUID tripId) {
+        return createBooking(user, tripId, null, null);
+    }
+
+    // Get all bookings for a user (newest first) — for user dashboard
     public List<Booking> getUserBookings(User user) {
         return bookingRepository.findByUserOrderByCreatedAtDesc(user);
     }
 
-    // Get all bookings for a specific user — for past trips view
+    // Get all bookings for a specific user — past trips view
     public List<Booking> getPastBookings(User user) {
         return bookingRepository.findByUserOrderByCreatedAtDesc(user)
                 .stream()
@@ -77,8 +94,6 @@ public class BookingService {
         Booking booking = getBookingById(bookingId);
         booking.setStatus("CANCELLED");
         bookingRepository.save(booking);
-
-        // Free the trip slot back up
         tripService.updateTripStatus(booking.getTrip().getId(), "AVAILABLE");
     }
 
@@ -90,11 +105,11 @@ public class BookingService {
         bookingRepository.save(booking);
     }
 
-    // Count confirmed/pending bookings for a user — for dashboard stats
+    // Count confirmed bookings for a user — for dashboard stats
     public long countActiveBookings(User user) {
         return bookingRepository.findByUser(user)
                 .stream()
-                .filter(b -> "CONFIRMED".equals(b.getStatus()) || "PENDING".equals(b.getStatus()))
+                .filter(b -> "CONFIRMED".equals(b.getStatus()))
                 .count();
     }
 
