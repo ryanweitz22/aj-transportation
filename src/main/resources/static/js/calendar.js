@@ -1,8 +1,8 @@
 /**
  * calendar.js — AJ Transportation
- * Green  = existing AVAILABLE trip  → click to book immediately
- * Amber  = open business hours slot → click to request a trip
- * Red    = BOOKED
+ * Green  = AVAILABLE trip  → book now
+ * Amber  = PENDING trip    → awaiting admin approval, not bookable
+ * Red    = BOOKED trip     → taken
  * Grey   = past / blocked / closed
  */
 
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function () {
     renderCalendar(trips, businessHours, currentWeekStart);
     updateNavButtons();
 
-    ['booking-modal','request-modal'].forEach(id => {
+    ['booking-modal'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('click', e => { if (e.target === el) closeAllModals(); });
     });
@@ -80,9 +80,9 @@ function renderCalendar(trips, businessHours, weekStart) {
         days.push(d);
     }
 
-    const CAL_START = 4 * 60;   // 04:00 in minutes
+    const CAL_START = 4 * 60;
     const PX_HOUR   = 60;
-    const TOTAL_H   = PX_HOUR * 8; // 8 hours shown
+    const TOTAL_H   = PX_HOUR * 8;
 
     let html = '<div class="calendar-grid">';
 
@@ -116,11 +116,6 @@ function renderCalendar(trips, businessHours, weekStart) {
             .filter(t => t.date === dateStr)
             .sort((a,b) => timeToMin(a.startTime) - timeToMin(b.startTime));
 
-        const bh     = businessHours[dateStr] || {};
-        const bhOpen  = bh.open  ? timeToMin(bh.open)  : null;
-        const bhClose = bh.close ? timeToMin(bh.close) : null;
-        const isOpen  = bhOpen !== null && bhClose !== null;
-
         html += `<div class="cal-day-column ${isPast?'past-col':''}" style="height:${TOTAL_H}px;">`;
 
         // Hour lines
@@ -128,41 +123,10 @@ function renderCalendar(trips, businessHours, weekStart) {
             html += `<div class="hour-line" style="top:${h*PX_HOUR}px;"></div>`;
         }
 
-        // ── Amber open slots ──────────────────────────────────────────────────
-        if (!isPast && isOpen) {
-            let t = bhOpen;
-            while (t < bhClose) {
-                // Only draw if within our display window
-                if (t >= CAL_START && t < CAL_START + 8*60) {
-                    const covered = dayTrips.some(trip => {
-                        const s = timeToMin(trip.startTime);
-                        const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
-                        return t >= s && t < e;
-                    });
-                    if (!covered) {
-                        const topPx = ((t - CAL_START) / 60) * PX_HOUR;
-                        const hPx   = Math.max((30/60)*PX_HOUR - 2, 22);
-                        const timeStr = minToTime(t);
-                        const slotData = JSON.stringify({date:dateStr,time:timeStr}).replace(/'/g,'&#39;');
-                        html += `<div class="trip-slot slot-open"
-                            style="top:${topPx}px;height:${hPx}px;"
-                            data-open='${slotData}'
-                            onclick="handleOpenSlotClick(this)"
-                            role="button" tabindex="0"
-                            title="Request a trip at ${timeStr}">
-                            <span class="slot-time">${timeStr}</span>
-                            <span class="slot-label">Tap to request</span>
-                        </div>`;
-                    }
-                }
-                t += 30;
-            }
-        }
-
-        // ── Existing trip slots ───────────────────────────────────────────────
+        // Trip slots
         dayTrips.forEach(trip => {
-            const s   = timeToMin(trip.startTime);
-            const e   = trip.endTime ? timeToMin(trip.endTime) : s + 60;
+            const s = timeToMin(trip.startTime);
+            const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
             if (e <= CAL_START || s >= CAL_START + 8*60) return;
 
             const cs = Math.max(s, CAL_START);
@@ -170,18 +134,19 @@ function renderCalendar(trips, businessHours, weekStart) {
             const topPx = ((cs - CAL_START)/60)*PX_HOUR;
             const hPx   = Math.max(((ce-cs)/60)*PX_HOUR, 36);
 
-            const avail  = trip.status === 'AVAILABLE' && !isPast;
-            const booked = trip.status === 'BOOKED';
-            const cls    = avail ? 'slot-available' : booked ? 'slot-booked' : 'slot-blocked';
-            const fee    = trip.fee ? `R${parseFloat(trip.fee).toFixed(2)}` : '';
-            const endLbl = trip.endTime ? ` – ${trip.endTime}` : '';
+            const isAvailable = trip.status === 'AVAILABLE' && !isPast;
+            const isPending   = trip.status === 'PENDING';
+            const isBooked    = trip.status === 'BOOKED';
+            const fee         = trip.fee ? `R${parseFloat(trip.fee).toFixed(2)}` : '';
+            const endLbl      = trip.endTime ? ` – ${trip.endTime}` : '';
 
-            if (avail) {
+            if (isAvailable) {
+                // GREEN — bookable
                 const data = JSON.stringify({
                     id:trip.id, label:trip.label||'', startTime:trip.startTime,
                     endTime:trip.endTime||'', date:trip.date, fee:trip.fee||''
                 }).replace(/'/g,'&#39;');
-                html += `<div class="trip-slot ${cls}"
+                html += `<div class="trip-slot slot-available"
                     style="top:${topPx}px;height:${hPx}px;"
                     data-trip='${data}'
                     onclick="handleSlotClick(this)"
@@ -191,13 +156,28 @@ function renderCalendar(trips, businessHours, weekStart) {
                     <span class="slot-fee">${fee}</span>
                     <span class="slot-cta">Tap to book →</span>
                 </div>`;
-            } else {
-                html += `<div class="trip-slot ${cls}"
+            } else if (isPending) {
+                // AMBER — awaiting admin approval, not bookable
+                html += `<div class="trip-slot slot-open"
+                    style="top:${topPx}px;height:${hPx}px;cursor:default;">
+                    <span class="slot-time">${trip.startTime}${endLbl}</span>
+                    <span class="slot-label">${escHtml(trip.label||'')}</span>
+                    <span class="slot-status-tag" style="background:rgba(240,165,0,0.15);color:#92400e;">Awaiting Approval</span>
+                </div>`;
+            } else if (isBooked) {
+                // RED — confirmed booked
+                html += `<div class="trip-slot slot-booked"
                     style="top:${topPx}px;height:${hPx}px;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label||'')}</span>
-                    <span class="slot-fee">${fee}</span>
-                    ${booked?'<span class="slot-status-tag">Booked</span>':''}
+                    <span class="slot-status-tag">Booked</span>
+                </div>`;
+            } else {
+                // GREY — blocked or past
+                html += `<div class="trip-slot slot-blocked"
+                    style="top:${topPx}px;height:${hPx}px;">
+                    <span class="slot-time">${trip.startTime}${endLbl}</span>
+                    <span class="slot-label">${escHtml(trip.label||'')}</span>
                 </div>`;
             }
         });
@@ -223,29 +203,21 @@ function handleSlotClick(el) {
     } catch(e) { console.error(e); }
 }
 
-function handleOpenSlotClick(el) {
-    try {
-        const s = JSON.parse(el.getAttribute('data-open'));
-        openRequestModal(s.date, s.time);
-    } catch(e) { console.error(e); }
-}
-
 // ─── Book modal ───────────────────────────────────────────────────────────────
 function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const modal   = document.getElementById('booking-modal');
     const details = document.getElementById('booking-details');
     const input   = document.getElementById('tripIdInput');
-    if (!modal||!details) return;
+    if (!modal || !details) return;
 
     const displayDate = new Date(date+'T00:00:00').toLocaleDateString('en-ZA',
         {weekday:'long',day:'numeric',month:'long',year:'numeric'});
     const timeLbl = endTime ? `${startTime} – ${endTime}` : startTime;
-    const feeLine = fee && fee!==''
-        ? `<div class="booking-detail-row"><span class="detail-label">Fee</span><span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span></div>`
-        : `<div class="booking-detail-row"><span class="detail-label">Fee</span><span class="detail-value" style="color:var(--text-muted);">To be confirmed</span></div>`;
+    const feeLine = fee && fee !== ''
+        ? `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span></div>`
+        : `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value" style="color:var(--text-muted);">To be confirmed</span></div>`;
 
     details.innerHTML = `
-        <div class="booking-detail-row"><span class="detail-label">Route</span><span class="detail-value">${escHtml(label)}</span></div>
         <div class="booking-detail-row"><span class="detail-label">Date</span><span class="detail-value">${displayDate}</span></div>
         <div class="booking-detail-row"><span class="detail-label">Time</span><span class="detail-value">${timeLbl}</span></div>
         ${feeLine}`;
@@ -255,30 +227,11 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     document.body.style.overflow = 'hidden';
 }
 
-// ─── Request modal ────────────────────────────────────────────────────────────
-function openRequestModal(date, time) {
-    const modal = document.getElementById('request-modal');
-    if (!modal) return;
-
-    const displayDate = new Date(date+'T00:00:00').toLocaleDateString('en-ZA',
-        {weekday:'long',day:'numeric',month:'long',year:'numeric'});
-
-    const summary = document.getElementById('request-slot-summary');
-    if (summary) summary.textContent = `${displayDate} at ${time}`;
-
-    const di = document.getElementById('requestedDate');
-    const ti = document.getElementById('requestedStartTime');
-    if (di) di.value = date;
-    if (ti) ti.value = time;
-
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-}
-
 // ─── Close ────────────────────────────────────────────────────────────────────
 function closeAllModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
     document.body.style.overflow = '';
+    resetBookingModal();
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
