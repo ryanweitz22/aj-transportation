@@ -12,17 +12,10 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * TripService — Phase 6 + Phase 8
- *
- * Handles all trip CRUD, status changes, and (Phase 8) Google Maps
- * distance/ETA/fee auto-calculation when pickup + dropoff addresses are supplied.
- */
 @Service
 public class TripService {
 
-    // Default rate per km (R8.00) — used as fallback when pricing_config row is absent
-    private static final BigDecimal DEFAULT_RATE_PER_KM = new BigDecimal("8.00");
+    private static final BigDecimal DEFAULT_RATE_PER_KM  = new BigDecimal("8.00");
     private static final BigDecimal DEFAULT_MINIMUM_FARE = new BigDecimal("50.00");
 
     private final TripRepository tripRepository;
@@ -39,30 +32,22 @@ public class TripService {
 
     // ── Calendar queries ───────────────────────────────────────────────────────
 
-    /** All trips for a full week (Mon–Sun) — used by admin schedule view. */
     public List<Trip> getTripsForWeek(LocalDate weekStart) {
         return tripRepository.findByDateBetween(weekStart, weekStart.plusDays(6));
     }
 
-    /** All trips for a single day — used by admin day view. */
     public List<Trip> getTripsForDay(LocalDate date) {
         return tripRepository.findByDate(date);
     }
 
-    /** Trips for any date range — admin month view. */
     public List<Trip> getTripsForRange(LocalDate from, LocalDate to) {
         return tripRepository.findByDateBetween(from, to);
     }
 
-    /**
-     * Visible trips for the user-facing calendar (hides BLOCKED slots).
-     * Returns AVAILABLE and BOOKED only.
-     */
     public List<Trip> getVisibleTripsForWeek(LocalDate weekStart) {
         return tripRepository.findByDateBetweenAndStatusNot(weekStart, weekStart.plusDays(6), "BLOCKED");
     }
 
-    /** Single trip by ID — throws if not found. */
     public Trip getTripById(UUID id) {
         return tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Trip not found: " + id));
@@ -70,25 +55,40 @@ public class TripService {
 
     // ── Create / Save ──────────────────────────────────────────────────────────
 
-    /**
-     * Saves a new trip.
-     *
-     * If pickup + dropoff addresses are provided:
-     *   1. Calls Google Maps Distance Matrix API for real km and ETA.
-     *   2. Adds 15-minute buffer to ETA to set endTime automatically.
-     *   3. Calculates fee using price-per-km algorithm.
-     *
-     * If addresses are missing or Google Maps call fails, the trip is saved
-     * with whatever values the admin manually entered.
-     */
     public Trip createTrip(Trip trip) {
         if (trip.getStatus() == null || trip.getStatus().isBlank()) {
             trip.setStatus("AVAILABLE");
         }
-
-        // Only attempt Google Maps enrichment when both addresses are present
         if (hasAddresses(trip)) {
             enrichTripWithGoogleMaps(trip);
+        }
+        return tripRepository.save(trip);
+    }
+
+    /**
+     * Creates a trip on the fly when a user books an open business hours slot.
+     * The trip is created with PENDING status immediately.
+     * Pickup + dropoff come from the user's booking inputs.
+     * Fee is calculated via Google Maps using the pricing config.
+     */
+    public Trip createOnTheFlyTrip(LocalDate date, LocalTime startTime,
+                                    String pickupAddress, String dropoffAddress) {
+        Trip trip = new Trip();
+        trip.setDate(date);
+        trip.setStartTime(startTime);
+        trip.setPickupAddress(pickupAddress);
+        trip.setDropoffAddress(dropoffAddress);
+        trip.setStatus("PENDING");
+        trip.setLabel("User Request");
+
+        // Try to enrich with Google Maps for distance + fee + endTime
+        if (hasAddresses(trip)) {
+            enrichTripWithGoogleMaps(trip);
+        }
+
+        // If fee still null after enrichment (API key missing etc), apply minimum fare
+        if (trip.getFee() == null) {
+            trip.setFee(getPricingConfig().getMinimumFare());
         }
 
         return tripRepository.save(trip);
@@ -126,47 +126,27 @@ public class TripService {
 
     // ── Google Maps enrichment ─────────────────────────────────────────────────
 
-    /**
-     * Calls Google Maps and enriches the trip with:
-     *  - distanceKm
-     *  - googleEtaMinutes
-     *  - bufferedDurationMinutes (ETA + 15)
-     *  - endTime (startTime + bufferedDurationMinutes)
-     *  - fee (distanceKm × ratePerKm, floored at minimumFare)
-     */
     private void enrichTripWithGoogleMaps(Trip trip) {
         GoogleMapsService.DistanceResult result =
                 googleMapsService.getDistanceAndEta(trip.getPickupAddress(), trip.getDropoffAddress());
 
-        if (result == null) {
-            // Google Maps call failed or API key not set — keep admin-entered values as-is
-            return;
-        }
+        if (result == null) return;
 
-        // Store distance and timing
         trip.setDistanceKm(result.distanceKm);
         trip.setGoogleEtaMinutes(result.etaMinutes);
         trip.setBufferedDurationMinutes(result.bufferedDurationMinutes);
 
-        // Auto-set endTime from startTime + buffered duration
         if (trip.getStartTime() != null) {
-            LocalTime endTime = trip.getStartTime().plusMinutes(result.bufferedDurationMinutes);
-            trip.setEndTime(endTime);
+            trip.setEndTime(trip.getStartTime().plusMinutes(result.bufferedDurationMinutes));
         }
 
-        // Calculate fee using price-per-km algorithm
         PricingConfig config = getPricingConfig();
-        BigDecimal fee = googleMapsService.calculateFee(
-                result.distanceKm,
-                config.getRatePerKm(),
-                config.getMinimumFare()
-        );
-        trip.setFee(fee);
+        trip.setFee(googleMapsService.calculateFee(
+                result.distanceKm, config.getRatePerKm(), config.getMinimumFare()));
     }
 
     // ── Pricing config ─────────────────────────────────────────────────────────
 
-    /** Loads the single pricing_config row (id=1), with safe defaults if absent. */
     public PricingConfig getPricingConfig() {
         return pricingConfigRepository.findById(1).orElseGet(() -> {
             PricingConfig defaults = new PricingConfig();
@@ -177,7 +157,6 @@ public class TripService {
         });
     }
 
-    /** Saves updated pricing config (admin only). */
     public void savePricingConfig(BigDecimal ratePerKm, BigDecimal minimumFare) {
         PricingConfig config = getPricingConfig();
         config.setRatePerKm(ratePerKm);

@@ -238,10 +238,14 @@ function handleSlotClick(el) {
 function handleOpenSlotClick(el) {
     try {
         const s = JSON.parse(el.getAttribute('data-open'));
+        // Store date + time for open slot form submission
+        const slotDateEl = document.getElementById('book-slot-date');
+        const slotTimeEl = document.getElementById('book-slot-time');
+        if (slotDateEl) slotDateEl.value = s.date;
+        if (slotTimeEl) slotTimeEl.value = s.time;
         openBookingModal(null, null, s.time, null, s.date, null);
     } catch(e) { console.error(e); }
 }
-
 // ─── Booking modal ────────────────────────────────────────────────────────────
 function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const modal   = document.getElementById('booking-modal');
