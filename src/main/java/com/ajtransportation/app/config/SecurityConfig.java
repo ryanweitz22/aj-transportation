@@ -17,11 +17,10 @@ public class SecurityConfig {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                "/", "/about", "/contact",
-                "/login", "/register", "/verify-email",
-                "/css/**", "/js/**", "/images/**",
-                "/bookings", "/bookings/waiting/**",
-                "/bookings/status/**", "/bookings/pending-count"
+                    "/", "/about", "/contact",
+                    "/login", "/register", "/verify-email",
+                    "/css/**", "/js/**", "/images/**",
+                    "/bookings"
                 ).permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()

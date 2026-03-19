@@ -34,11 +34,23 @@ public class BusinessHoursService {
         return !time.isBefore(open) && time.isBefore(close);
     }
 
+    /**
+     * Returns true if the given date+time is in the past.
+     * Used to block bookings on today's date for times that have already passed.
+     */
+    public boolean isPastSlot(LocalDate date, LocalTime time) {
+        LocalDate today = LocalDate.now();
+        if (date.isBefore(today)) return true;
+        if (date.isAfter(today))  return false;
+        // Same day — check if time has already passed
+        return time.isBefore(LocalTime.now());
+    }
+
     public LocalDate maxBookingDate() {
         return LocalDate.now().plusYears(1);
     }
 
     public LocalDate minBookingDate() {
-        return LocalDate.now().plusDays(1);
+        return LocalDate.now();
     }
 }
