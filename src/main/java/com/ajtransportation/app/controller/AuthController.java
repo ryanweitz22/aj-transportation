@@ -77,9 +77,19 @@ public class AuthController {
         return "redirect:/?logout=true";
     }
 
+    /**
+     * /dashboard — redirects admin to admin dashboard, users to user dashboard.
+     */
     @GetMapping("/dashboard")
     public String dashboard(@AuthenticationPrincipal UserDetails userDetails, Model model) {
         User user = userService.findByEmail(userDetails.getUsername());
+
+        // Admin goes straight to their own dashboard
+        if ("ADMIN".equals(user.getRole())) {
+            return "redirect:/admin/dashboard";
+        }
+
+        // Regular user dashboard
         var bookings = bookingService.getUserBookings(user);
         long activeBookingCount = bookingService.countActiveBookings(user);
         long pendingCount = bookings.stream()
