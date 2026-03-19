@@ -3,7 +3,6 @@ package com.ajtransportation.app.controller;
 import com.ajtransportation.app.model.RegisterRequest;
 import com.ajtransportation.app.model.User;
 import com.ajtransportation.app.service.BookingService;
-import com.ajtransportation.app.service.TripRequestService;
 import com.ajtransportation.app.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,14 +21,10 @@ public class AuthController {
 
     private final UserService userService;
     private final BookingService bookingService;
-    private final TripRequestService tripRequestService;
 
-    public AuthController(UserService userService,
-                          BookingService bookingService,
-                          TripRequestService tripRequestService) {
+    public AuthController(UserService userService, BookingService bookingService) {
         this.userService = userService;
         this.bookingService = bookingService;
-        this.tripRequestService = tripRequestService;
     }
 
     @GetMapping("/login")
@@ -85,18 +80,16 @@ public class AuthController {
     @GetMapping("/dashboard")
     public String dashboard(@AuthenticationPrincipal UserDetails userDetails, Model model) {
         User user = userService.findByEmail(userDetails.getUsername());
-        var bookings     = bookingService.getUserBookings(user);
-        var tripRequests = tripRequestService.getUserRequests(user);
-        long activeBookingCount  = bookingService.countActiveBookings(user);
-        long pendingRequestCount = tripRequests.stream()
-            .filter(r -> "PENDING".equals(r.getStatus())).count();
+        var bookings = bookingService.getUserBookings(user);
+        long activeBookingCount = bookingService.countActiveBookings(user);
+        long pendingCount = bookings.stream()
+            .filter(b -> "PENDING_APPROVAL".equals(b.getStatus())).count();
 
-        model.addAttribute("user",                user);
-        model.addAttribute("bookings",            bookings);
-        model.addAttribute("tripRequests",        tripRequests);
-        model.addAttribute("activeBookingCount",  activeBookingCount);
-        model.addAttribute("totalBookingCount",   bookings.size());
-        model.addAttribute("pendingRequestCount", pendingRequestCount);
+        model.addAttribute("user",               user);
+        model.addAttribute("bookings",           bookings);
+        model.addAttribute("activeBookingCount", activeBookingCount);
+        model.addAttribute("totalBookingCount",  bookings.size());
+        model.addAttribute("pendingCount",       pendingCount);
         return "user/dashboard";
     }
 }
