@@ -1,5 +1,6 @@
 # AJ Transportation — Project Context & Checklist
 ### For use when starting a new Claude chat session
+### Last updated: After Phase 6 complete + Phase 7 partial
 
 ---
 
@@ -7,27 +8,26 @@
 
 **App name:** AJ Transportation
 **Purpose:** Web-based transportation booking system
-**Owner:** Uncle Ajmal
+**Owner:** Uncle Ajmal (South Africa)
 **Team size:** 2 people (both complete beginners)
-**Demo target:** ~2 weeks from project start
+**IDE:** VS Code
+**Version control:** GitHub Desktop only (no CLI git)
 
 **What the app does:**
-- Customers register via email/username/password and book transportation trips
-- They see a live weekly calendar showing available and booked time slots
-- They cannot book already-taken slots
-- Trip pricing is calculated automatically via a **price-per-km algorithm** — R8.00/km, minimum R50.00
-- **Google Maps Distance Matrix API** used for real-world distance and ETA on each trip
-- Each trip slot automatically has a **15-minute buffer** added to Google Maps ETA (endTime = startTime + ETA + 15 min)
-- Admin/owner sets trip availability and can **block time slots** (breaks, Friday prayers, sick days, personal reasons)
-- Admin can toggle any slot between **Blocked**, **Available**, and view Booked slots
-- Payments will be processed via Ozow (South African EFT) — linked after security hardening
-- Both customer and admin have completely separate interfaces
-- Must be mobile responsive (phone + laptop)
-- Must be highly secure before payment account is linked
+- Customers register via email / phone number / username / password
+- Email verification is required before a user can log in
+- Weekly calendar shows: green slots (existing trips — book immediately), amber slots (open business hours — request a custom trip), red slots (already booked), grey (closed/blocked/past)
+- Clicking a green slot → booking modal → user confirms → trip is booked immediately
+- Clicking an amber slot → request modal → user fills in pickup + dropoff + notes → admin reviews and approves or rejects
+- Trip pricing: R8.00/km, minimum fare R50.00 — calculated via Google Maps Distance Matrix API
+- Each trip gets a 15-minute buffer added to Google Maps ETA (endTime = startTime + ETA + 15 min)
+- Admin can: create trips, block slots, cancel bookings, approve/reject trip requests, view all users, view trip logs
+- Payments via Ozow (South African EFT) — Phase 9
+- Email notifications — Phase 10
 
 ---
 
-## 🛠️ Tech Stack (Decided and Fixed)
+## 🛠️ Tech Stack (Fixed — do NOT change under any circumstances)
 
 | Layer | Technology |
 |---|---|
@@ -42,192 +42,291 @@
 | Version control | GitHub Desktop |
 | IDE | VS Code |
 
-> ⚠️ Do NOT suggest changing the tech stack under any circumstances.
-
 ---
 
-## 🚨 Critical Notes for Claude
+## 🚨 Critical Notes for Claude — Read Before Writing Any Code
 
-1. Spring Boot version is **4.0.3** — always use `jakarta.*` not `javax.*` imports
-2. Java on machine is 25 but project targets 21 — this is fine, do not change
-3. `application-local.properties` is gitignored — each teammate has their own local copy
-4. Supabase connection uses **port 5432** with pooler host format
-5. Supabase username format is `postgres.PROJECT_ID` (not just `postgres`)
-6. GitHub Desktop is used — no command-line git commands needed
-7. Both teammates are **complete beginners** — explain everything step by step
-8. Payment gateway is **Ozow** — South African EFT only, no cards
-9. Do NOT suggest changing the tech stack
-10. Fonts used: **Syne** (headings) + **DM Sans** (body) — keep consistent
-11. Color theme: primary `#0a7c6e` (teal), accent `#f0a500` (gold), dark bg `#0d1117`
-12. Colors, wording, logo, and calendar structure are **NOT final** — placeholders only
-13. Owner logo and photos of Uncle Ajmal + clients still need to be provided
-14. Ozow payment account linked **only after** Phase 11 security hardening is complete
-15. Admin account created directly in Supabase using bcrypt hash from bcrypt-generator.com
-16. Rate per km is confirmed: **R8.00/km** with a minimum fare of **R50.00**
-17. Google Maps API key stored in `application-local.properties` as `google.maps.api-key`
-18. `RestTemplate` is used for Google Maps calls (no extra Maven dependency needed in Spring Boot)
-19. `GoogleMapsService` gracefully handles missing API key — trip creation still works without it
-
----
-
-## 💰 Price-Per-Km Algorithm (IMPLEMENTED — Phase 8)
-
-- Rate: **R8.00/km** (configurable via `/admin/trips/pricing`)
-- Minimum fare: **R50.00** (configurable)
-- Formula: `fee = MAX(distanceKm × ratePerKm, minimumFare)`
-- Google Maps Distance Matrix API provides accurate real-world distance
-- Fee stored on the `trips` table and shown to user in booking modal
-- `PricingConfig` table (id=1) stores current rate + minimum fare
-- `TripService.savePricingConfig()` updates the config row
-- `TripService.getPricingConfig()` loads it with safe defaults if row is absent
-
----
-
-## 🗺️ Google Maps Integration (IMPLEMENTED — Phase 8)
-
-**Service:** `GoogleMapsService.java`
-
-**What it does:**
-1. Calls `https://maps.googleapis.com/maps/api/distancematrix/json`
-2. Returns `DistanceResult` with:
-   - `distanceKm` — real-world km (2 decimal places)
-   - `etaMinutes` — Google's travel time in minutes
-   - `bufferedDurationMinutes` — etaMinutes + 15
-3. `calculateFee(distanceKm, ratePerKm, minimumFare)` applies the price-per-km formula
-
-**How trips get enriched automatically:**
-- Admin fills in pickup + dropoff on `/admin/trips/new`
-- On save, `TripService.createTrip()` calls `enrichTripWithGoogleMaps()`
-- Sets: `distanceKm`, `googleEtaMinutes`, `bufferedDurationMinutes`, `endTime`, `fee`
-- If Google Maps fails or API key is missing → trip saved with admin-entered values
-
-**API key setup (each teammate):**
-```properties
-# application-local.properties
-google.maps.api-key=YOUR_GOOGLE_MAPS_API_KEY
-```
-
----
-
-## ⏱️ 15-Minute Buffer System (IMPLEMENTED)
-
-- `endTime = startTime + googleEtaMinutes + 15`
-- Stored as `buffered_duration_minutes` in the `trips` table
-- Prevents double-bookings caused by traffic delays or unforeseen stops
-- Admin can still override `endTime` manually if addresses are not provided
-
----
-
-## 📅 Booking Calendar — Fixed Issues (Phase 6 fix session)
-
-**Problems fixed:**
-1. **Trip slots not clickable** — `.slot-pill` had `pointer-events: none` in CSS. Fixed by rebuilding slot HTML in `calendar.js` without pill wrappers, using `onclick="handleSlotClick(this)"` directly on the `.trip-slot` div.
-2. **Modal not opening** — The modal overlay used the wrong CSS class (`modal` + `modal-backdrop` approach) that conflicted with the Thymeleaf `sec:authorize` rendering. Rebuilt the modal as a single `.modal-overlay` div with class `open`/hidden toggled by JS.
-3. **Booking form hidden for guests** — `sec:authorize` sections now correctly show: confirm form for logged-in users, login/register prompt for guests.
-4. **Data attribute approach** — Trip data is now stored as JSON in `data-trip='...'` on each slot div. `handleSlotClick(this)` parses it. No more passing 6 args through `onclick`.
-
-**Files changed in this fix session:**
-- `src/main/resources/static/js/calendar.js` — full rewrite of slot rendering + modal logic
-- `src/main/resources/templates/user/bookings.html` — modal rebuilt, sec:authorize fixed
+1. Spring Boot **4.0.3** — always use `jakarta.*` not `javax.*` imports
+2. Java on machine is 25, project targets 21 — do not change pom.xml
+3. `application-local.properties` is gitignored — never commit it, share via WhatsApp only
+4. Supabase uses **port 6543** (Transaction mode pooler) — NOT 5432. Using 5432 causes `MaxClientsInSessionMode` crash
+5. HikariCP pool: `maximum-pool-size=2`, `minimum-idle=1` — required for Supabase free tier
+6. Supabase username format: `postgres.PROJECT_ID`
+7. GitHub Desktop only — never give CLI git commands to the team
+8. Both teammates are complete beginners — explain every step clearly
+9. Payment gateway: Ozow only — South African EFT, no cards
+10. Fonts: **Syne** (headings) + **DM Sans** (body) — never change these
+11. Colors: primary `#0a7c6e` (teal), accent `#f0a500` (gold), dark bg `#0d1117`
+12. Rate per km: **R8.00/km**, minimum fare: **R50.00** — configurable at `/admin/trips/pricing`
+13. Google Maps API key in `application-local.properties` as `google.maps.api-key`
+14. `app.base-url=http://localhost:8080` in `application.properties` — change for production
+15. `RestTemplate` bean declared in `WebConfig.java` — Spring Boot 4 does NOT auto-create it
+16. Admin account must have `email_verified = true` set manually in Supabase SQL
+17. `style.css` was fully rewritten to fix a broken unclosed CSS block — do not revert to old version
+18. `contact.html` form uses `POST /contact` — handled by `PageController.java`
+19. When generating steps for the team, always split work between Person 1 and Person 2 simultaneously where possible
+20. **Do NOT generate an entire phase at once** — break into small blocks and wait for user confirmation before proceeding to next block
 
 ---
 
 ## ✅ Phase Completion Status
 
-### Phase 1 — Setup: ✅ COMPLETE
+### Phase 1 — Project Setup: ✅ COMPLETE
 ### Phase 2 — Spring Boot Project: ✅ COMPLETE
 ### Phase 3 — Frontend Pages: ✅ COMPLETE
 ### Phase 4 — Database Tables + Java Models: ✅ COMPLETE
-### Phase 5 — User Registration & Login: ✅ COMPLETE
-### Phase 6 — Booking Calendar Backend: ✅ COMPLETE
-### Phase 7 — Admin Dashboard (partial): ✅ COMPLETE (schedule, slot blocking, booking cancel)
+### Phase 5 — User Registration & Login: ✅ COMPLETE (with updates)
+
+**Phase 5 updates applied:**
+- `User.java` — added `phone_number`, `email_verified`, `verification_token`, `is_blocked`
+- `RegisterRequest.java` — added `phoneNumber` with SA phone number validation
+- `UserService.java` — sends verification email on register; `verifyEmail(token)` method
+- `UserRepository.java` — added `findByVerificationToken()`, `findAllByOrderByCreatedAtDesc()`
+- `CustomUserDetailsService.java` — blocks login if `emailVerified=false` OR `isBlocked=true`
+- `AuthController.java` — added `/verify-email?token=` endpoint; better error messages
+- `register.html` — phone number field added, email verification notice shown
+- `application.properties` — `app.base-url=http://localhost:8080` added
+
+**⚠️ Required Supabase SQL (run once if not already done):**
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT false;
+
+-- IMPORTANT: Must run this or admin cannot log in
+UPDATE users SET email_verified = true WHERE role = 'ADMIN';
+```
+
+### Phase 6 — Booking Calendar: ✅ COMPLETE
+
+**All Phase 6 items done:**
+- `BookingsController.java` — `/bookings`, `/bookings/book`, `/bookings/cancel/{id}`, `/bookings/request`
+- `TripService.java` — trip CRUD + Google Maps enrichment
+- `BookingService.java` — create/cancel bookings with race condition protection
+- `calendar.js` — full rewrite: green (available) + amber (open request) + red (booked) slots; both modals wired
+- `bookings.html` — both modals (booking + request), sec:authorize correct
+- `TripRequest.java` — model for user-submitted trip requests
+- `TripRequestRepository.java` — queries for requests
+- `TripRequestService.java` — create/approve/reject requests
+- `BusinessHoursService.java` — Mon–Thu 04:00–12:00, Fri 04:00–11:30, Sat 06:00–10:00, Sun closed
+- `WebConfig.java` — RestTemplate bean (new file required for Spring Boot 4)
+
+**⚠️ Required Supabase SQL (run once if not already done):**
+```sql
+CREATE TABLE IF NOT EXISTS trip_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  requested_date DATE NOT NULL,
+  requested_start_time TIME NOT NULL,
+  pickup_address VARCHAR NOT NULL,
+  dropoff_address VARCHAR NOT NULL,
+  additional_notes VARCHAR(500),
+  status VARCHAR NOT NULL DEFAULT 'PENDING',
+  trip_id UUID REFERENCES trips(id),
+  admin_notes VARCHAR(500),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE trips ALTER COLUMN end_time DROP NOT NULL;
+```
+
+### Phase 7 — Admin Dashboard: 🔄 PARTIALLY COMPLETE
+
+**Completed in Phase 7:**
+- `AdminDashboardController.java` — Day/Week/Month schedule view, block/unblock slots, cancel bookings
+- `AdminTripController.java` — create trips, pricing config
+- `AdminRequestController.java` — ✅ `/admin/requests` approve/reject trip requests
+- `AdminUserController.java` — ✅ `/admin/users` view/block/unblock/verify/delete
+- `AdminLogsController.java` — ✅ `/admin/logs` trip log with date range filter
+- `admin/dashboard.html` — schedule with Day/Week/Month toggle
+- `admin/requests.html` — ✅ trip request inbox (shows user email + phone)
+- `admin/users.html` — ✅ user management table
+- `admin/logs.html` — ✅ trip log with revenue summary
+- `user/dashboard.html` — updated: bookings table + trip requests log + 3 stat cards
+- `user/bookings.html` — booking modal + request modal fully working
+
+**⚠️ Phase 7 items still TODO (in priority order):**
+1. Admin private booking — book a trip on behalf of a specific user
+2. Block whole day — block all slots on a given date at once
+3. Revenue dashboard at `/admin/revenue`
+4. In-app admin notifications — `notifications` table + badge count
+
 ### Phase 8 — Google Maps + Price-Per-Km: ✅ COMPLETE
+- `GoogleMapsService.java` — Distance Matrix API
+- `TripService.java` — auto-enriches trips when addresses provided
+- `admin/trips-new.html` — shows Google Maps mode vs manual mode
+- `admin/pricing.html` — live fee preview
 
-### Phase 7 remaining items: ⬜ TODO
-- Admin User Management (`/admin/users`) — block, unblock, delete, edit users
-- Revenue Dashboard with Ozow vs Cash split
-- In-App Admin Notifications (`notifications` table)
-
-### Phase 9 — Ozow Payment Integration: ⬜ TODO
-### Phase 10 — Email + SMS Notifications: ⬜ TODO
-### Phase 11 — Security Hardening + Ozow Account Link: ⬜ TODO
-### Phase 12 — Mobile Responsiveness & Testing: ⬜ TODO
-### Phase 13 — Deployment: ⬜ TODO
-
----
-
-## 📁 Full Project Folder Structure (Current State)
-
-```
-aj-transportation/
-│
-├── src/main/java/com/ajtransportation/app/
-│   ├── config/
-│   │   └── SecurityConfig.java                  ✅ Phase 5 + @EnableMethodSecurity
-│   ├── controller/
-│   │   ├── PageController.java                  ✅ /, /about, /contact
-│   │   ├── AuthController.java                  ✅ /register, /login, /dashboard
-│   │   ├── BookingsController.java              ✅ /bookings, /bookings/book, /bookings/cancel
-│   │   ├── AdminTripController.java             ✅ /admin/trips/**, /admin/trips/pricing
-│   │   └── AdminDashboardController.java        ✅ /admin/dashboard (Day/Week/Month views)
-│   ├── model/
-│   │   ├── User.java                            ✅ Phase 4
-│   │   ├── Trip.java                            ✅ Phase 4
-│   │   ├── Booking.java                         ✅ Phase 4
-│   │   ├── Payment.java                         ✅ Phase 4
-│   │   ├── PricingConfig.java                   ✅ Phase 4
-│   │   └── RegisterRequest.java                 ✅ Phase 5
-│   ├── repository/
-│   │   ├── UserRepository.java                  ✅ Phase 4
-│   │   ├── TripRepository.java                  ✅ Phase 4
-│   │   ├── BookingRepository.java               ✅ Phase 4
-│   │   ├── PaymentRepository.java               ✅ Phase 4
-│   │   └── PricingConfigRepository.java         ✅ Phase 4
-│   ├── service/
-│   │   ├── UserService.java                     ✅ Phase 5
-│   │   ├── CustomUserDetailsService.java        ✅ Phase 5
-│   │   ├── TripService.java                     ✅ Phase 6 + Phase 8 (Google Maps enrichment)
-│   │   ├── BookingService.java                  ✅ Phase 6
-│   │   └── GoogleMapsService.java               ✅ Phase 8 (NEW)
-│   └── AppApplication.java                      ✅
-│
-├── src/main/resources/
-│   ├── templates/
-│   │   ├── index.html                           ✅ Homepage
-│   │   ├── about.html                           ✅ About page
-│   │   ├── contact.html                         ✅ Contact page
-│   │   ├── auth/
-│   │   │   ├── login.html                       ✅ Phase 5
-│   │   │   └── register.html                    ✅ Phase 5
-│   │   ├── user/
-│   │   │   ├── bookings.html                    ✅ Phase 6 (FIXED — modal + click working)
-│   │   │   └── dashboard.html                   ✅ Phase 6
-│   │   ├── admin/
-│   │   │   ├── dashboard.html                   ✅ Phase 7 (Day/Week/Month views)
-│   │   │   ├── trips-list.html                  ✅ Phase 6
-│   │   │   ├── trips-new.html                   ✅ Phase 8 (Google Maps mode indicator)
-│   │   │   └── pricing.html                     ✅ Phase 8 (NEW — rate/km + minimum fare)
-│   │   └── layout/
-│   │       └── base.html                        ✅ Shared layout
-│   ├── static/
-│   │   ├── css/
-│   │   │   ├── style.css                        ✅ Main styles
-│   │   │   └── bookings.css                     ✅ Calendar styles
-│   │   ├── js/
-│   │   │   ├── main.js                          ✅ Navbar + animations
-│   │   │   └── calendar.js                      ✅ Phase 6 FIXED — click-to-book working
-│   │   └── images/                              ⬜ Awaiting assets from Uncle Ajmal
-│   ├── application.properties                   ✅ Committed to GitHub
-│   └── application-local.properties             ✅ Local only — GITIGNORED
-│
-├── pom.xml                                      ✅ All dependencies
-├── .gitignore                                   ✅ Protects secrets
-└── README.md                                    ✅
-```
+### Phase 9 — Ozow Payment Integration: ⬜ NOT STARTED
+### Phase 10 — Email + SMS Notifications: ⬜ NOT STARTED
+### Phase 11 — Security Hardening: ⬜ NOT STARTED
+### Phase 12 — Mobile Responsiveness: ⬜ NOT STARTED
+### Phase 13 — Deployment: ⬜ NOT STARTED
 
 ---
 
-## ⚙️ Current application.properties
+## 📁 Complete File Structure (True Current State)
+
+```
+src/main/java/com/ajtransportation/app/
+├── config/
+│   ├── SecurityConfig.java              ✅ /verify-email added as public route
+│   └── WebConfig.java                   ✅ RestTemplate bean
+├── controller/
+│   ├── PageController.java              ✅ GET + POST /contact
+│   ├── AuthController.java              ✅ /register /login /dashboard /verify-email
+│   ├── BookingsController.java          ✅ /bookings /bookings/book /bookings/request /bookings/cancel
+│   ├── AdminTripController.java         ✅ /admin/trips/** /admin/trips/pricing
+│   ├── AdminDashboardController.java    ✅ /admin/dashboard Day/Week/Month
+│   ├── AdminRequestController.java      ✅ /admin/requests approve/reject
+│   ├── AdminUserController.java         ✅ /admin/users view/block/verify/delete
+│   └── AdminLogsController.java         ✅ /admin/logs date filter
+├── model/
+│   ├── User.java                        ✅ phone email_verified verification_token is_blocked
+│   ├── Trip.java                        ✅ end_time nullable
+│   ├── TripRequest.java                 ✅ open slot trip requests
+│   ├── Booking.java                     ✅
+│   ├── Payment.java                     ✅
+│   ├── PricingConfig.java               ✅
+│   └── RegisterRequest.java             ✅ phoneNumber + SA validation
+├── repository/
+│   ├── UserRepository.java              ✅ findByVerificationToken findAllByOrderByCreatedAtDesc
+│   ├── TripRepository.java              ✅
+│   ├── TripRequestRepository.java       ✅
+│   ├── BookingRepository.java           ✅
+│   ├── PaymentRepository.java           ✅
+│   └── PricingConfigRepository.java     ✅
+└── service/
+    ├── UserService.java                 ✅ email verification
+    ├── CustomUserDetailsService.java    ✅ blocks unverified + blocked
+    ├── TripService.java                 ✅ CRUD + Google Maps enrichment
+    ├── TripRequestService.java          ✅ create/approve/reject requests
+    ├── BookingService.java              ✅
+    ├── BusinessHoursService.java        ✅ open hours definition
+    └── GoogleMapsService.java           ✅ Distance Matrix API
+
+src/main/resources/
+├── templates/
+│   ├── index.html                       ✅
+│   ├── about.html                       ✅
+│   ├── contact.html                     ✅
+│   ├── auth/
+│   │   ├── login.html                   ✅
+│   │   └── register.html                ✅ phone number field
+│   ├── user/
+│   │   ├── bookings.html                ✅ booking + request modals
+│   │   └── dashboard.html               ✅ bookings + trip requests + stat cards
+│   └── admin/
+│       ├── dashboard.html               ✅ Day/Week/Month + block/cancel
+│       ├── trips-list.html              ✅
+│       ├── trips-new.html               ✅ Google Maps mode indicator
+│       ├── pricing.html                 ✅ live fee preview
+│       ├── requests.html                ✅ trip request inbox
+│       ├── users.html                   ✅ user management
+│       └── logs.html                    ✅ trip log date filter
+├── static/
+│   ├── css/
+│   │   ├── style.css                    ✅ fully rewritten — broken CSS fixed
+│   │   └── bookings.css                 ✅
+│   └── js/
+│       ├── main.js                      ✅
+│       └── calendar.js                  ✅ green+amber+red slots + both modals
+├── application.properties               ✅ app.base-url included
+└── application-local.properties         GITIGNORED
+```
+
+---
+
+## 🗄️ Database Tables (Complete Current State)
+
+### `users`
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| email | VARCHAR | Unique |
+| username | VARCHAR | Display name |
+| phone_number | VARCHAR | Optional, SA format |
+| password | VARCHAR | BCrypt |
+| role | VARCHAR | USER / ADMIN |
+| email_verified | BOOLEAN | Must be true to log in |
+| verification_token | VARCHAR | Cleared after verification |
+| is_blocked | BOOLEAN | Admin can block users |
+| created_at | TIMESTAMP | Auto |
+
+### `trips`
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| date | DATE | |
+| start_time | TIME | |
+| end_time | TIME | Nullable |
+| pickup_address | VARCHAR | |
+| dropoff_address | VARCHAR | |
+| distance_km | DECIMAL | From Google Maps |
+| google_eta_minutes | INT | |
+| buffered_duration_minutes | INT | ETA + 15 |
+| fee | DECIMAL | MAX(km × R8, R50) |
+| status | VARCHAR | AVAILABLE / BOOKED / BLOCKED |
+| blocked_reason | VARCHAR | Internal |
+| label | VARCHAR | Shown on calendar |
+| created_at | TIMESTAMP | |
+
+### `trip_requests`
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| user_id | UUID | FK → users |
+| requested_date | DATE | |
+| requested_start_time | TIME | |
+| pickup_address | VARCHAR | |
+| dropoff_address | VARCHAR | |
+| additional_notes | VARCHAR(500) | Optional |
+| status | VARCHAR | PENDING / APPROVED / REJECTED |
+| trip_id | UUID | FK → trips (set on approval) |
+| admin_notes | VARCHAR(500) | Admin message to user |
+| created_at | TIMESTAMP | |
+
+### `bookings`
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| user_id | UUID | FK → users |
+| trip_id | UUID | FK → trips |
+| status | VARCHAR | PENDING / CONFIRMED / CANCELLED |
+| payment_status | VARCHAR | UNPAID / PAID |
+| created_at | TIMESTAMP | |
+
+### `payments`
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| booking_id | UUID | FK → bookings |
+| amount | DECIMAL | |
+| ozow_reference | VARCHAR | Ozow transaction ID |
+| payment_method | VARCHAR | OZOW or CASH (add in Phase 9) |
+| status | VARCHAR | PENDING / SUCCESS / FAILED |
+| created_at | TIMESTAMP | |
+
+### `pricing_config`
+| Column | Type | Notes |
+|---|---|---|
+| id | INT | Always = 1 |
+| rate_per_km | DECIMAL | R8.00/km |
+| minimum_fare | DECIMAL | R50.00 |
+| updated_at | TIMESTAMP | |
+
+### `notifications` — ⬜ NOT YET CREATED
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID | PK |
+| message | VARCHAR | e.g. "John booked Trip 2026-04-01 08:00" |
+| is_read | BOOLEAN | Default false |
+| created_at | TIMESTAMP | |
+
+---
+
+## ⚙️ application.properties (committed to GitHub)
 
 ```properties
 spring.application.name=aj-transportation
@@ -245,29 +344,89 @@ spring.mail.port=587
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
 spring.jpa.open-in-view=false
+app.base-url=http://localhost:8080
 ```
-
----
 
 ## ⚙️ application-local.properties template (GITIGNORED)
 
 ```properties
-spring.datasource.url=jdbc:postgresql://[POOLER_HOST]:5432/postgres
+spring.datasource.url=jdbc:postgresql://[POOLER_HOST]:6543/postgres
 spring.datasource.username=postgres.[PROJECT_ID]
 spring.datasource.password=[DB_PASSWORD]
 spring.datasource.driver-class-name=org.postgresql.Driver
+spring.datasource.hikari.maximum-pool-size=2
+spring.datasource.hikari.minimum-idle=1
 supabase.url=https://[PROJECT_ID].supabase.co
 supabase.anon-key=[ANON_KEY]
 supabase.service-role-key=[SERVICE_ROLE_KEY]
 spring.mail.username=YOUR_GMAIL@gmail.com
 spring.mail.password=YOUR_GMAIL_APP_PASSWORD
-# Google Maps API key — required for Phase 8 auto-calculation
 google.maps.api-key=YOUR_GOOGLE_MAPS_API_KEY
 ```
 
 ---
 
-## 📦 pom.xml Dependencies (Current — no new dependencies needed for Phase 8)
+## 🗺️ URL Routing (Complete)
+
+| URL | Status | Auth |
+|---|---|---|
+| `/` | ✅ | Public |
+| `/about` | ✅ | Public |
+| `/contact` GET + POST | ✅ | Public |
+| `/bookings` | ✅ | Public |
+| `/bookings/book` | ✅ | Logged in |
+| `/bookings/request` | ✅ | Logged in |
+| `/bookings/cancel/{id}` | ✅ | Logged in |
+| `/login` | ✅ | Public |
+| `/register` | ✅ | Public |
+| `/verify-email?token=` | ✅ | Public |
+| `/dashboard` | ✅ | Logged in |
+| `/logout` | ✅ | Logged in |
+| `/admin/dashboard` | ✅ | ADMIN |
+| `/admin/dashboard/block/{id}` | ✅ | ADMIN |
+| `/admin/dashboard/unblock/{id}` | ✅ | ADMIN |
+| `/admin/dashboard/cancel-by-trip/{id}` | ✅ | ADMIN |
+| `/admin/trips` | ✅ | ADMIN |
+| `/admin/trips/new` | ✅ | ADMIN |
+| `/admin/trips/pricing` | ✅ | ADMIN |
+| `/admin/trips/block/{id}` | ✅ | ADMIN |
+| `/admin/trips/unblock/{id}` | ✅ | ADMIN |
+| `/admin/trips/delete/{id}` | ✅ | ADMIN |
+| `/admin/requests` | ✅ | ADMIN |
+| `/admin/requests/approve/{id}` | ✅ | ADMIN |
+| `/admin/requests/reject/{id}` | ✅ | ADMIN |
+| `/admin/users` | ✅ | ADMIN |
+| `/admin/users/block/{id}` | ✅ | ADMIN |
+| `/admin/users/unblock/{id}` | ✅ | ADMIN |
+| `/admin/users/verify/{id}` | ✅ | ADMIN |
+| `/admin/users/delete/{id}` | ✅ | ADMIN |
+| `/admin/logs` | ✅ | ADMIN |
+| `/admin/revenue` | ⬜ Phase 7 remaining | ADMIN |
+| `/admin/notifications` | ⬜ Phase 7 remaining | ADMIN |
+
+---
+
+## 🔑 Admin Account Setup in Supabase
+
+```sql
+INSERT INTO users (id, email, username, password, role, email_verified, is_blocked, created_at)
+VALUES (
+  gen_random_uuid(),
+  'admin@ajtransportation.co.za',
+  'admin',
+  '$2a$10$PASTE_YOUR_BCRYPT_HASH_HERE',
+  'ADMIN',
+  true,
+  false,
+  NOW()
+);
+```
+
+Get your bcrypt hash from [bcrypt-generator.com](https://bcrypt-generator.com).
+
+---
+
+## 📦 pom.xml Dependencies (No Changes Needed Until Phase 9)
 
 ```
 spring-boot-starter-data-jpa
@@ -275,198 +434,76 @@ spring-boot-starter-mail
 spring-boot-starter-security
 spring-boot-starter-thymeleaf
 spring-boot-starter-validation
-spring-boot-starter-webmvc          ← includes RestTemplate
+spring-boot-starter-webmvc
 thymeleaf-extras-springsecurity6
 spring-boot-devtools (runtime)
 postgresql (runtime)
-jackson-datatype-jsr310             ← for LocalDate/LocalTime JSON serialisation
+jackson-datatype-jsr310
 ```
 
-> 📌 `RestTemplate` is included with `spring-boot-starter-webmvc` — no extra dependency needed for Google Maps calls.
+No new Maven dependencies needed until Phase 9 (Ozow) or Phase 10 (Twilio SMS).
 
 ---
 
-## 🗄️ Database Tables (Supabase — Phase 4 + Phase 7 additions needed)
+## 🐛 Bugs Fixed (Do Not Reintroduce)
 
-### `users`
-| Column | Type | Notes |
-|---|---|---|
-| id | UUID | Primary key |
-| email | VARCHAR | Unique, used for login |
-| username | VARCHAR | Display name |
-| password | VARCHAR | BCrypt hashed |
-| role | VARCHAR | USER or ADMIN |
-| is_blocked | BOOLEAN | Default false — add in Phase 7 user management |
-| created_at | TIMESTAMP | Auto-set |
-
-### `trips`
-| Column | Type | Notes |
-|---|---|---|
-| id | UUID | Primary key |
-| date | DATE | Trip date |
-| start_time | TIME | Start of slot |
-| end_time | TIME | startTime + googleEtaMinutes + 15 min buffer |
-| pickup_address | VARCHAR | For Google Maps |
-| dropoff_address | VARCHAR | For Google Maps |
-| distance_km | DECIMAL | From Google Maps Distance Matrix |
-| google_eta_minutes | INT | Raw ETA from Google |
-| buffered_duration_minutes | INT | google_eta + 15 |
-| fee | DECIMAL | = MAX(distanceKm × R8.00, R50.00) |
-| status | VARCHAR | AVAILABLE / BOOKED / BLOCKED |
-| blocked_reason | VARCHAR | Internal only |
-| label | VARCHAR | Route name shown on calendar |
-| created_at | TIMESTAMP | Auto-set |
-
-### `bookings`
-| Column | Type | Notes |
-|---|---|---|
-| id | UUID | Primary key |
-| user_id | UUID | FK → users |
-| trip_id | UUID | FK → trips |
-| status | VARCHAR | PENDING / CONFIRMED / CANCELLED |
-| payment_status | VARCHAR | UNPAID / PAID |
-| created_at | TIMESTAMP | Auto-set |
-
-### `payments`
-| Column | Type | Notes |
-|---|---|---|
-| id | UUID | Primary key |
-| booking_id | UUID | FK → bookings |
-| amount | DECIMAL | Amount paid |
-| ozow_reference | VARCHAR | Ozow transaction ID |
-| payment_method | VARCHAR | `OZOW` or `CASH` — add in Phase 7 |
-| status | VARCHAR | PENDING / SUCCESS / FAILED |
-| created_at | TIMESTAMP | Auto-set |
-
-### `notifications` *(Phase 7 — not yet created)*
-| Column | Type | Notes |
-|---|---|---|
-| id | UUID | Primary key |
-| message | VARCHAR | e.g. "John booked Trip on 2026-04-01 at 08:00" |
-| is_read | BOOLEAN | Default false |
-| created_at | TIMESTAMP | Auto-set |
-
-### `pricing_config`
-| Column | Type | Notes |
-|---|---|---|
-| id | INT | Always = 1 (single row) |
-| rate_per_km | DECIMAL | R8.00/km (Uncle Ajmal's confirmed rate) |
-| minimum_fare | DECIMAL | R50.00 |
-| updated_at | TIMESTAMP | Last updated |
+| Bug | Fix |
+|---|---|
+| Booking modal not opening | Rebuilt slots with `data-trip` JSON + `onclick="handleSlotClick(this)"` |
+| Modal class mismatch | Uses `.open` class toggle, not `.hidden` |
+| Supabase MaxClientsInSessionMode | Port changed to 6543 + HikariCP pool limited |
+| Trip.java end_time crash | `@Column(name="end_time")` — removed `nullable=false` |
+| style.css broken CSS block | Unclosed rule corrupted all styles below it — fully rewritten |
+| Contact form 405 | Added `POST /contact` to `PageController.java` |
+| RestTemplate missing bean | Added `WebConfig.java` with `@Bean RestTemplate` |
+| Admin dashboard user navbar | `trips-list.html` corrected to admin navbar |
 
 ---
 
-## 🗺️ URL Routing (Current State)
+## ⚠️ What Comes Next — Phase 7 Remaining (Do In Order, Block By Block)
 
-| URL | Status | Auth |
-|---|---|---|
-| `/` | ✅ Built | ❌ Public |
-| `/about` | ✅ Built | ❌ Public |
-| `/contact` | ✅ Built | ❌ Public |
-| `/bookings` | ✅ Built + Fixed | ❌ Public |
-| `/bookings/book` | ✅ Phase 6 | ✅ Logged in |
-| `/bookings/cancel/{id}` | ✅ Phase 6 | ✅ Logged in |
-| `/login` | ✅ Phase 5 | ❌ Public |
-| `/register` | ✅ Phase 5 | ❌ Public |
-| `/dashboard` | ✅ Phase 5 + 6 | ✅ Logged in |
-| `/logout` | ✅ Phase 5 | ✅ Logged in |
-| `/admin/trips` | ✅ Phase 6 | ✅ ADMIN only |
-| `/admin/trips/new` | ✅ Phase 6 + 8 | ✅ ADMIN only |
-| `/admin/trips/pricing` | ✅ Phase 8 | ✅ ADMIN only |
-| `/admin/trips/block/{id}` | ✅ Phase 6 | ✅ ADMIN only |
-| `/admin/trips/unblock/{id}` | ✅ Phase 6 | ✅ ADMIN only |
-| `/admin/trips/delete/{id}` | ✅ Phase 6 | ✅ ADMIN only |
-| `/admin/dashboard` | ✅ Phase 7 | ✅ ADMIN only |
-| `/admin/dashboard/block/{id}` | ✅ Phase 7 | ✅ ADMIN only |
-| `/admin/dashboard/unblock/{id}` | ✅ Phase 7 | ✅ ADMIN only |
-| `/admin/dashboard/cancel-by-trip/{id}` | ✅ Phase 7 | ✅ ADMIN only |
-| `/admin/users` | ⬜ Phase 7 remaining | ✅ ADMIN only |
-| `/admin/users/edit/{id}` | ⬜ Phase 7 remaining | ✅ ADMIN only |
-| `/admin/users/block/{id}` | ⬜ Phase 7 remaining | ✅ ADMIN only |
-| `/admin/users/delete/{id}` | ⬜ Phase 7 remaining | ✅ ADMIN only |
-| `/admin/revenue` | ⬜ Phase 7 remaining | ✅ ADMIN only |
-| `/admin/notifications` | ⬜ Phase 7 remaining | ✅ ADMIN only |
-| `/api/price-estimate` | ⬜ Future | ❌ Public API |
+**Always: one block at a time, confirm before proceeding.**
+
+### Block A — Admin Private Booking
+Add ability for admin to manually book a trip on behalf of a specific registered user.
+- New form on existing admin pages
+- New endpoint `POST /admin/bookings/private`
+- Dropdown to select user + select available trip → creates Booking record
+
+### Block B — Block Whole Day  
+Admin can block all slots on a specific date at once.
+- New endpoint `POST /admin/dashboard/block-day`
+- Takes a date + reason → blocks all AVAILABLE trips on that date
+
+### Block C — Revenue Dashboard
+- New page `/admin/revenue`
+- Shows bookings count + total revenue for a date range
+- Needs: `ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR DEFAULT 'OZOW';`
+
+### Block D — In-App Notifications
+- Create `notifications` table in Supabase
+- Trigger notification when user makes a booking
+- Admin navbar badge with unread count
+- `/admin/notifications` page to view and mark as read
+
+### Then proceed to Phase 9 (Ozow) — only after Phase 11 security hardening
 
 ---
 
-## 🔐 SecurityConfig.java (Current — Phase 5, unchanged)
-
-- `/css/**`, `/js/**`, `/images/**`, `/fonts/**` — public
-- `/`, `/about`, `/contact`, `/bookings` — public
-- `/login`, `/register` — public
-- `/admin/**` — ADMIN role only
-- Everything else — authenticated users only
-- `@EnableMethodSecurity` enabled for `@PreAuthorize` on controllers
-
----
-
-## 📋 Assets Still Needed From Uncle Ajmal
-
-- [ ] Company logo (PNG or SVG preferred)
-- [ ] Photos of Uncle Ajmal (for About page)
-- [ ] Photos of clients / trips (for homepage)
-- [x] Rate per km — **confirmed R8.00/km**
-- [ ] Minimum fare — **using R50.00 as placeholder**
-- [ ] Days/times to block by default (e.g. every Friday 12:00–14:00)
-- [ ] Ozow merchant credentials (for Phase 9)
-- [ ] Any other features requested
-
----
-
-## 👥 Team Workflow
-
-- Both teammates use **GitHub Desktop** only (no CLI git)
-- Always **Fetch + Pull** before starting work each day
-- Always **Commit + Push** when done for the day
-- `application-local.properties` shared privately via WhatsApp — never via GitHub
-- Google Maps API key goes in `application-local.properties` — never commit it
-
----
-
-## 🚀 How to Run the App
+## 🚀 How to Run
 
 ```
-1. Open VS Code
-2. Open Terminal (Ctrl + `)
-3. Run: mvn spring-boot:run
-4. Open browser: http://localhost:8080
-5. Stop: Ctrl + C
+1. VS Code → open project folder
+2. Terminal (Ctrl + `): mvn spring-boot:run
+3. Browser: http://localhost:8080
+4. Stop: Ctrl+C
 ```
 
 ---
 
-## 🔑 Admin Login Details
+## 🔄 Team Workflow
 
-- **URL:** `http://localhost:8080/login`
-- **Email:** `admin@ajtransportation.co.za`
-- **Password:** whatever was entered into bcrypt-generator.com when creating the hash
-- Admin account was inserted directly into Supabase using SQL — role is `ADMIN`
-
----
-
-## 🗺️ How to Get a Google Maps API Key (for Phase 8)
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a project (or use existing)
-3. Enable the **Distance Matrix API**
-4. Go to **APIs & Services → Credentials → Create API Key**
-5. Copy the key
-6. Add to your local `application-local.properties`:
-   ```properties
-   google.maps.api-key=AIzaSy...yourkey...
-   ```
-7. Restart the app (`Ctrl+C` then `mvn spring-boot:run`)
-8. Create a trip with pickup + dropoff address — distance, ETA, and fee will auto-populate
-
-> ⚠️ Google Maps requires a billing account but has a $200/month free tier — more than enough for this app.
-
----
-
-## ⚠️ Known Items for Next Session
-
-- **Phase 7 remaining:** Admin user management, revenue dashboard, in-app notifications
-- **Phase 9:** Ozow payment integration (only after security hardening)
-- **`is_blocked` column** needs to be added to `users` table in Supabase for user blocking feature
-- **`payment_method` column** needs to be added to `payments` table for revenue split
-- **`notifications` table** needs to be created in Supabase
+1. GitHub Desktop → **Fetch origin** → **Pull origin** before starting
+2. Make changes in VS Code
+3. GitHub Desktop → write commit message → **Commit to main** → **Push origin**
+4. Share `application-local.properties` via WhatsApp only — never via GitHub
