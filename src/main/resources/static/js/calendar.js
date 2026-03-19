@@ -1,9 +1,10 @@
 /**
  * calendar.js — AJ Transportation
- * Green  = AVAILABLE trip  → book now
- * Amber  = PENDING trip    → awaiting admin approval, not bookable
- * Red    = BOOKED trip     → taken
- * Grey   = past / blocked / closed
+ * Teal/ghost = open business hours slot → click to book
+ * Green      = AVAILABLE trip created by admin → click to book
+ * Amber      = PENDING trip → awaiting admin approval, not bookable
+ * Red        = BOOKED trip → taken
+ * Grey       = past / blocked / closed
  */
 
 let currentWeekStart = null;
@@ -11,8 +12,8 @@ let currentWeekStart = null;
 document.addEventListener('DOMContentLoaded', function () {
     let trips = [];
     let businessHours = {};
-    try { trips = JSON.parse(TRIPS_DATA); }         catch (e) { trips = []; }
-    try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); } catch (e) { businessHours = {}; }
+    try { trips = JSON.parse(TRIPS_DATA); }                    catch (e) { trips = []; }
+    try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); }   catch (e) { businessHours = {}; }
 
     trips = trips.map(normaliseTrip);
     currentWeekStart = parseLocalDate(WEEK_START);
@@ -116,6 +117,11 @@ function renderCalendar(trips, businessHours, weekStart) {
             .filter(t => t.date === dateStr)
             .sort((a,b) => timeToMin(a.startTime) - timeToMin(b.startTime));
 
+        const bh      = businessHours[dateStr] || {};
+        const bhOpen  = bh.open  ? timeToMin(bh.open)  : null;
+        const bhClose = bh.close ? timeToMin(bh.close) : null;
+        const isOpen  = bhOpen !== null && bhClose !== null;
+
         html += `<div class="cal-day-column ${isPast?'past-col':''}" style="height:${TOTAL_H}px;">`;
 
         // Hour lines
@@ -123,14 +129,44 @@ function renderCalendar(trips, businessHours, weekStart) {
             html += `<div class="hour-line" style="top:${h*PX_HOUR}px;"></div>`;
         }
 
-        // Trip slots
+        // ── Open business hours slots (teal ghost) ────────────────────────────
+        if (!isPast && isOpen) {
+            let t = bhOpen;
+            while (t < bhClose) {
+                if (t >= CAL_START && t < CAL_START + 8*60) {
+                    const covered = dayTrips.some(trip => {
+                        const s = timeToMin(trip.startTime);
+                        const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
+                        return t >= s && t < e;
+                    });
+                    if (!covered) {
+                        const topPx  = ((t - CAL_START) / 60) * PX_HOUR;
+                        const hPx    = Math.max((30/60)*PX_HOUR - 2, 22);
+                        const timeStr = minToTime(t);
+                        const slotData = JSON.stringify({ date: dateStr, time: timeStr }).replace(/'/g,'&#39;');
+                        html += `<div class="trip-slot slot-open-hours"
+                            style="top:${topPx}px;height:${hPx}px;"
+                            data-open='${slotData}'
+                            onclick="handleOpenSlotClick(this)"
+                            role="button" tabindex="0"
+                            title="Request a trip at ${timeStr}">
+                            <span class="slot-time">${timeStr}</span>
+                            <span class="slot-cta">Book →</span>
+                        </div>`;
+                    }
+                }
+                t += 30;
+            }
+        }
+
+        // ── Existing trips ────────────────────────────────────────────────────
         dayTrips.forEach(trip => {
             const s = timeToMin(trip.startTime);
             const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
             if (e <= CAL_START || s >= CAL_START + 8*60) return;
 
-            const cs = Math.max(s, CAL_START);
-            const ce = Math.min(e, CAL_START + 8*60);
+            const cs   = Math.max(s, CAL_START);
+            const ce   = Math.min(e, CAL_START + 8*60);
             const topPx = ((cs - CAL_START)/60)*PX_HOUR;
             const hPx   = Math.max(((ce-cs)/60)*PX_HOUR, 36);
 
@@ -141,7 +177,6 @@ function renderCalendar(trips, businessHours, weekStart) {
             const endLbl      = trip.endTime ? ` – ${trip.endTime}` : '';
 
             if (isAvailable) {
-                // GREEN — bookable
                 const data = JSON.stringify({
                     id:trip.id, label:trip.label||'', startTime:trip.startTime,
                     endTime:trip.endTime||'', date:trip.date, fee:trip.fee||''
@@ -157,15 +192,13 @@ function renderCalendar(trips, businessHours, weekStart) {
                     <span class="slot-cta">Tap to book →</span>
                 </div>`;
             } else if (isPending) {
-                // AMBER — awaiting admin approval, not bookable
-                html += `<div class="trip-slot slot-open"
+                html += `<div class="trip-slot slot-pending"
                     style="top:${topPx}px;height:${hPx}px;cursor:default;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label||'')}</span>
-                    <span class="slot-status-tag" style="background:rgba(240,165,0,0.15);color:#92400e;">Awaiting Approval</span>
+                    <span class="slot-status-tag">Awaiting Approval</span>
                 </div>`;
             } else if (isBooked) {
-                // RED — confirmed booked
                 html += `<div class="trip-slot slot-booked"
                     style="top:${topPx}px;height:${hPx}px;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
@@ -173,7 +206,6 @@ function renderCalendar(trips, businessHours, weekStart) {
                     <span class="slot-status-tag">Booked</span>
                 </div>`;
             } else {
-                // GREY — blocked or past
                 html += `<div class="trip-slot slot-blocked"
                     style="top:${topPx}px;height:${hPx}px;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
@@ -203,7 +235,14 @@ function handleSlotClick(el) {
     } catch(e) { console.error(e); }
 }
 
-// ─── Book modal ───────────────────────────────────────────────────────────────
+function handleOpenSlotClick(el) {
+    try {
+        const s = JSON.parse(el.getAttribute('data-open'));
+        openBookingModal(null, null, s.time, null, s.date, null);
+    } catch(e) { console.error(e); }
+}
+
+// ─── Booking modal ────────────────────────────────────────────────────────────
 function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const modal   = document.getElementById('booking-modal');
     const details = document.getElementById('booking-details');
@@ -215,14 +254,14 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const timeLbl = endTime ? `${startTime} – ${endTime}` : startTime;
     const feeLine = fee && fee !== ''
         ? `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span></div>`
-        : `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value" style="color:var(--text-muted);">To be confirmed</span></div>`;
+        : `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value" style="color:var(--text-muted);">To be confirmed by driver</span></div>`;
 
     details.innerHTML = `
         <div class="booking-detail-row"><span class="detail-label">Date</span><span class="detail-value">${displayDate}</span></div>
         <div class="booking-detail-row"><span class="detail-label">Time</span><span class="detail-value">${timeLbl}</span></div>
         ${feeLine}`;
 
-    if (input) input.value = tripId;
+    if (input) input.value = tripId || '';
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
 }

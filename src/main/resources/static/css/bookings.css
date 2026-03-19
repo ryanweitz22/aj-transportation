@@ -187,3 +187,30 @@
     .upcoming-item { grid-template-columns: 48px 1fr auto; }
     .upcoming-price { display: none; }
 }
+
+/* Open business hours slot — teal ghost style */
+.slot-open-hours {
+    background: rgba(10, 124, 110, 0.06);
+    border: 1.5px dashed rgba(10, 124, 110, 0.35);
+    color: var(--primary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.slot-open-hours:hover {
+    background: rgba(10, 124, 110, 0.13);
+    border-color: var(--primary);
+}
+.slot-open-hours .slot-cta {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--primary);
+    opacity: 0.8;
+}
+
+/* Pending slot — muted teal waiting state */
+.slot-pending {
+    background: rgba(240, 165, 0, 0.08);
+    border: 1.5px solid rgba(240, 165, 0, 0.35);
+    color: #92400e;
+    cursor: default;
+}
