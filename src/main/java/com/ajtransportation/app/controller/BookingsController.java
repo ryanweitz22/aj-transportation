@@ -73,10 +73,6 @@ public class BookingsController {
         return "user/bookings";
     }
 
-    /**
-     * GET /bookings/calculate-fare
-     * Called by JS on step 1 → step 2 transition to show fare before confirming.
-     */
     @GetMapping("/bookings/calculate-fare")
     @ResponseBody
     public Map<String, Object> calculateFare(
@@ -105,9 +101,56 @@ public class BookingsController {
     }
 
     /**
-     * POST /bookings/book
-     * Handles both green slots (tripId present) and open slots (tripId blank).
+     * GET /bookings/status/{id}
+     * Polled every 3 seconds by the user's waiting screen.
+     * Returns the booking status — also auto-cancels if over 60 seconds old.
      */
+    @GetMapping("/bookings/status/{id}")
+    @ResponseBody
+    public Map<String, Object> bookingStatus(@PathVariable UUID id) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            String status = bookingService.getBookingStatusForPolling(id);
+            result.put("status", status);
+        } catch (Exception e) {
+            result.put("status", "ERROR");
+        }
+        return result;
+    }
+
+    /**
+     * GET /bookings/pending-count
+     * Polled every 3 seconds by all admin pages to check for new pending bookings.
+     * Returns the count + basic details of pending bookings for the notification popup.
+     */
+    @GetMapping("/bookings/pending-count")
+    @ResponseBody
+    public Map<String, Object> pendingCount() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            List<Booking> pending = bookingService.getPendingBookings();
+            result.put("count", pending.size());
+            // Include basic details for the popup
+            List<Map<String, Object>> bookings = pending.stream().map(b -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id",            b.getId().toString());
+                m.put("userEmail",     b.getUser().getEmail());
+                m.put("pickup",        b.getPickupAddress() != null ? b.getPickupAddress() : "—");
+                m.put("dropoff",       b.getDropoffAddress() != null ? b.getDropoffAddress() : "—");
+                m.put("fare",          b.getTrip().getFee() != null ? "R" + b.getTrip().getFee() : "TBC");
+                m.put("date",          b.getTrip().getDate().toString());
+                m.put("time",          b.getTrip().getStartTime().toString());
+                m.put("createdAt",     b.getCreatedAt().toString());
+                return m;
+            }).toList();
+            result.put("bookings", bookings);
+        } catch (Exception e) {
+            result.put("count", 0);
+            result.put("bookings", List.of());
+        }
+        return result;
+    }
+
     @PostMapping("/bookings/book")
     public String bookTrip(
             @RequestParam(value = "tripId",        required = false) String tripId,
@@ -130,26 +173,58 @@ public class BookingsController {
         User user = userService.findByEmail(userDetails.getUsername());
 
         try {
+            Booking booking;
             if (tripId != null && !tripId.isBlank()) {
-                // Green slot — existing admin-created trip
-                bookingService.createBooking(user, UUID.fromString(tripId), pickupAddress, dropoffAddress);
+                Trip trip = tripService.getTripById(UUID.fromString(tripId));
+                if (businessHoursService.isPastSlot(trip.getDate(), trip.getStartTime())) {
+                    ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
+                    return "redirect:/bookings";
+                }
+                booking = bookingService.createBooking(user, UUID.fromString(tripId), pickupAddress, dropoffAddress);
             } else {
-                // Open slot — create trip on the fly
                 if (slotDate == null || slotTime == null) {
                     ra.addFlashAttribute("errorMessage", "Invalid slot selection. Please try again.");
                     return "redirect:/bookings";
                 }
                 LocalDate date      = LocalDate.parse(slotDate);
                 LocalTime startTime = LocalTime.parse(slotTime);
-                bookingService.createBookingForOpenSlot(user, date, startTime, pickupAddress, dropoffAddress);
+                if (businessHoursService.isPastSlot(date, startTime)) {
+                    ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
+                    return "redirect:/bookings";
+                }
+                booking = bookingService.createBookingForOpenSlot(user, date, startTime, pickupAddress, dropoffAddress);
             }
-            ra.addFlashAttribute("successMessage",
-                "Booking submitted! Your driver will review and confirm shortly.");
-            return "redirect:/dashboard";
+
+            // Redirect to waiting screen with booking ID so it can poll for status
+            return "redirect:/bookings/waiting/" + booking.getId();
+
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
             return "redirect:/bookings";
         }
+    }
+
+    /**
+     * GET /bookings/waiting/{id}
+     * The waiting screen shown to the user after booking — polls for admin response.
+     */
+    @GetMapping("/bookings/waiting/{id}")
+    public String waitingScreen(@PathVariable UUID id,
+                                @AuthenticationPrincipal UserDetails userDetails,
+                                Model model) {
+        Booking booking = bookingService.getBookingById(id);
+        // Security — only the booking owner can see this page
+        if (!booking.getUser().getEmail().equals(userDetails.getUsername())) {
+            return "redirect:/dashboard";
+        }
+        model.addAttribute("bookingId", id);
+        model.addAttribute("pickup",    booking.getPickupAddress());
+        model.addAttribute("dropoff",   booking.getDropoffAddress());
+        model.addAttribute("fare",      booking.getTrip().getFee() != null
+                                            ? "R" + booking.getTrip().getFee() : "TBC");
+        model.addAttribute("date",      booking.getTrip().getDate());
+        model.addAttribute("time",      booking.getTrip().getStartTime());
+        return "user/booking-waiting";
     }
 
     @PostMapping("/bookings/cancel/{id}")

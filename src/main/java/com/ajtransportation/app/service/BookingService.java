@@ -18,22 +18,19 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final TripService tripService;
 
+    private static final List<String> INACTIVE_STATUSES = List.of("CANCELLED", "REJECTED");
+
     public BookingService(BookingRepository bookingRepository, TripService tripService) {
         this.bookingRepository = bookingRepository;
         this.tripService = tripService;
     }
 
-    /**
-     * User books an existing admin-created trip (green slot).
-     */
     @Transactional
     public Booking createBooking(User user, UUID tripId, String pickupAddress, String dropoffAddress) {
         if (!tripService.isTripAvailable(tripId)) {
             throw new RuntimeException("Sorry, that slot is no longer available.");
         }
-
-        // Use the fixed query that excludes both CANCELLED and REJECTED
-        if (bookingRepository.existsActiveBookingForTrip(tripId)) {
+        if (bookingRepository.existsByTripIdAndStatusNotInOrderByCreatedAtAsc(tripId, INACTIVE_STATUSES)) {
             throw new RuntimeException("This slot has just been taken. Please choose another.");
         }
 
@@ -48,16 +45,11 @@ public class BookingService {
         booking.setPaymentStatus("UNPAID");
         booking.setCreatedAt(LocalDateTime.now());
 
-        // Lock slot — shows as amber on calendar, not bookable by anyone else
         tripService.updateTripStatus(tripId, "PENDING");
 
         return bookingRepository.save(booking);
     }
 
-    /**
-     * User books an open business hours slot (teal ghost slot).
-     * Creates a trip on the fly then immediately creates the booking.
-     */
     @Transactional
     public Booking createBookingForOpenSlot(User user, LocalDate date, LocalTime startTime,
                                              String pickupAddress, String dropoffAddress) {
@@ -75,10 +67,6 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
-    /**
-     * Admin accepts a booking.
-     * Trip moves to BOOKED. Phase 9: Ozow payment triggered here.
-     */
     @Transactional
     public void acceptBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
@@ -89,41 +77,25 @@ public class BookingService {
         // Phase 9: trigger Ozow payment here
     }
 
-    /**
-     * Admin rejects a booking.
-     * - If the trip was created on the fly (label = "User Request"), delete it entirely
-     *   so it doesn't pollute the calendar or block future bookings.
-     * - If it was an admin-created trip, just set it back to AVAILABLE.
-     */
     @Transactional
     public void rejectBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
-
         booking.setStatus("REJECTED");
         bookingRepository.save(booking);
-
         if ("User Request".equals(trip.getLabel())) {
-            // On-the-fly trip — delete it so the open slot is clean again
             tripService.deleteTrip(trip.getId());
         } else {
-            // Admin-created trip — just free the slot back to available
             tripService.updateTripStatus(trip.getId(), "AVAILABLE");
         }
     }
 
-    /**
-     * User cancels before admin responds.
-     * Same logic as reject — delete on-the-fly trips, free admin trips.
-     */
     @Transactional
     public void cancelBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
-
         booking.setStatus("CANCELLED");
         bookingRepository.save(booking);
-
         if ("User Request".equals(trip.getLabel())) {
             tripService.deleteTrip(trip.getId());
         } else {
@@ -131,7 +103,6 @@ public class BookingService {
         }
     }
 
-    // Admin cancels a booking by trip ID from admin dashboard
     @Transactional
     public void cancelBookingByTripId(UUID tripId) {
         bookingRepository.findByTripIdAndStatusNot(tripId, "CANCELLED")
@@ -142,7 +113,35 @@ public class BookingService {
             });
     }
 
-    // All bookings awaiting admin approval
+    /**
+     * Called by the user's polling request — returns the current status of a booking.
+     * Also auto-cancels if more than 60 seconds have passed with no admin response.
+     */
+    @Transactional
+    public String getBookingStatusForPolling(UUID bookingId) {
+        Booking booking = getBookingById(bookingId);
+
+        // If still pending and older than 60 seconds — auto cancel
+        if ("PENDING_APPROVAL".equals(booking.getStatus())) {
+            long secondsElapsed = java.time.Duration.between(
+                booking.getCreatedAt(), LocalDateTime.now()).getSeconds();
+
+            if (secondsElapsed >= 60) {
+                Trip trip = booking.getTrip();
+                booking.setStatus("CANCELLED");
+                bookingRepository.save(booking);
+                if ("User Request".equals(trip.getLabel())) {
+                    tripService.deleteTrip(trip.getId());
+                } else {
+                    tripService.updateTripStatus(trip.getId(), "AVAILABLE");
+                }
+                return "EXPIRED";
+            }
+        }
+
+        return booking.getStatus();
+    }
+
     public List<Booking> getPendingBookings() {
         return bookingRepository.findByStatusOrderByCreatedAtAsc("PENDING_APPROVAL");
     }
