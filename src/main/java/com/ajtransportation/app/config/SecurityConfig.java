@@ -20,7 +20,10 @@ public class SecurityConfig {
                     "/", "/about", "/contact",
                     "/login", "/register", "/verify-email",
                     "/css/**", "/js/**", "/images/**",
-                    "/bookings"
+                    "/bookings",
+                    "/bookings/waiting/**",
+                    "/bookings/status/**",
+                    "/bookings/pending-count"
                 ).permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
