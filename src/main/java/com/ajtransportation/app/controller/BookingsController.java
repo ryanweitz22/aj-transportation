@@ -73,10 +73,6 @@ public class BookingsController {
         return "user/bookings";
     }
 
-    /**
-     * GET /bookings/calculate-fare
-     * Called by JS on step 1 → step 2 transition to show fare before confirming.
-     */
     @GetMapping("/bookings/calculate-fare")
     @ResponseBody
     public Map<String, Object> calculateFare(
@@ -104,10 +100,6 @@ public class BookingsController {
         return result;
     }
 
-    /**
-     * POST /bookings/book
-     * Handles both green slots (tripId present) and open slots (tripId blank).
-     */
     @PostMapping("/bookings/book")
     public String bookTrip(
             @RequestParam(value = "tripId",        required = false) String tripId,
@@ -132,20 +124,39 @@ public class BookingsController {
         try {
             if (tripId != null && !tripId.isBlank()) {
                 // Green slot — existing admin-created trip
+                Trip trip = tripService.getTripById(UUID.fromString(tripId));
+
+                // Block booking if this trip's time has already passed today
+                if (businessHoursService.isPastSlot(trip.getDate(), trip.getStartTime())) {
+                    ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
+                    return "redirect:/bookings";
+                }
+
                 bookingService.createBooking(user, UUID.fromString(tripId), pickupAddress, dropoffAddress);
+
             } else {
                 // Open slot — create trip on the fly
                 if (slotDate == null || slotTime == null) {
                     ra.addFlashAttribute("errorMessage", "Invalid slot selection. Please try again.");
                     return "redirect:/bookings";
                 }
+
                 LocalDate date      = LocalDate.parse(slotDate);
                 LocalTime startTime = LocalTime.parse(slotTime);
+
+                // Block booking if this open slot time has already passed today
+                if (businessHoursService.isPastSlot(date, startTime)) {
+                    ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
+                    return "redirect:/bookings";
+                }
+
                 bookingService.createBookingForOpenSlot(user, date, startTime, pickupAddress, dropoffAddress);
             }
+
             ra.addFlashAttribute("successMessage",
                 "Booking submitted! Your driver will review and confirm shortly.");
             return "redirect:/dashboard";
+
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
             return "redirect:/bookings";
