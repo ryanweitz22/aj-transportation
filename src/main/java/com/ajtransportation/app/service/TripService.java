@@ -32,46 +32,41 @@ public class TripService {
         this.googleMapsService = googleMapsService;
     }
 
-    // ── Calendar queries — read-only, no write transaction needed ──────────────
+    // ── Calendar queries ───────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Trip> getTripsForWeek(LocalDate weekStart) {
         return tripRepository.findByDateBetween(weekStart, weekStart.plusDays(6));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Trip> getTripsForDay(LocalDate date) {
         return tripRepository.findByDate(date);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Trip> getTripsForRange(LocalDate from, LocalDate to) {
         return tripRepository.findByDateBetween(from, to);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Trip> getVisibleTripsForWeek(LocalDate weekStart) {
         return tripRepository.findByDateBetweenAndStatusNot(weekStart, weekStart.plusDays(6), "BLOCKED");
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Trip getTripById(UUID id) {
         return tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Trip not found: " + id));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public boolean isTripAvailable(UUID id) {
         return "AVAILABLE".equals(getTripById(id).getStatus());
     }
 
     // ── Create / Save ──────────────────────────────────────────────────────────
 
-    /**
-     * Creates an admin-created trip slot.
-     * rollbackFor = Exception.class ensures any failure (including Google Maps
-     * errors) rolls back cleanly and never leaves a broken connection.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Trip createTrip(Trip trip) {
         if (trip.getStatus() == null || trip.getStatus().isBlank()) {
@@ -83,11 +78,6 @@ public class TripService {
         return tripRepository.save(trip);
     }
 
-    /**
-     * Creates a trip on the fly when a user books an open business hours slot.
-     * Trip is created with PENDING status immediately.
-     * Fee is calculated via Google Maps using the pricing config.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Trip createOnTheFlyTrip(LocalDate date, LocalTime startTime,
                                     String pickupAddress, String dropoffAddress) {
@@ -142,7 +132,7 @@ public class TripService {
 
     // ── Pricing config ─────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public PricingConfig getPricingConfig() {
         return pricingConfigRepository.findById(1).orElseGet(() -> {
             PricingConfig defaults = new PricingConfig();

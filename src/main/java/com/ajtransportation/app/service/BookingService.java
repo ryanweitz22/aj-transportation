@@ -26,13 +26,6 @@ public class BookingService {
         this.tripService = tripService;
     }
 
-    /**
-     * Creates a booking for an admin-created trip slot.
-     * READ_COMMITTED prevents two users booking the same slot simultaneously.
-     * rollbackFor = Exception.class ensures ANY failure rolls back cleanly —
-     * this is the key fix to stop Supabase connections getting stuck in
-     * an aborted transaction state (SQLState 25P02).
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Booking createBooking(User user, UUID tripId, String pickupAddress, String dropoffAddress) {
         if (!tripService.isTripAvailable(tripId)) {
@@ -58,9 +51,6 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
-    /**
-     * Creates a booking for an open business hours slot (trip created on the fly).
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Booking createBookingForOpenSlot(User user, LocalDate date, LocalTime startTime,
                                              String pickupAddress, String dropoffAddress) {
@@ -78,9 +68,6 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
-    /**
-     * Admin accepts a booking.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public void acceptBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
@@ -88,12 +75,8 @@ public class BookingService {
         booking.setPaymentStatus("AWAITING_PAYMENT");
         bookingRepository.save(booking);
         tripService.updateTripStatus(booking.getTrip().getId(), "BOOKED");
-        // Phase 9: trigger Ozow payment here
     }
 
-    /**
-     * Admin rejects a booking — slot freed back to AVAILABLE.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public void rejectBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
@@ -107,9 +90,6 @@ public class BookingService {
         }
     }
 
-    /**
-     * User or system cancels a booking.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public void cancelBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
@@ -123,9 +103,6 @@ public class BookingService {
         }
     }
 
-    /**
-     * Admin cancels a booking by trip ID.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public void cancelBookingByTripId(UUID tripId) {
         bookingRepository.findByTripIdAndStatusNot(tripId, "CANCELLED")
@@ -136,10 +113,6 @@ public class BookingService {
             });
     }
 
-    /**
-     * Polled every 3 seconds by the user waiting screen.
-     * Auto-cancels and frees the slot if admin hasn't responded within 60 seconds.
-     */
     @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public String getBookingStatusForPolling(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
@@ -164,27 +137,23 @@ public class BookingService {
         return booking.getStatus();
     }
 
-    /**
-     * Read-only queries — readOnly = true means Spring never opens a write
-     * transaction, reducing load on Supabase's 2-connection free tier pool.
-     */
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Booking> getPendingBookings() {
         return bookingRepository.findByStatusOrderByCreatedAtAsc("PENDING_APPROVAL");
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Booking getBookingById(UUID id) {
         return bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Booking> getUserBookings(User user) {
         return bookingRepository.findByUserOrderByCreatedAtDesc(user);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public long countActiveBookings(User user) {
         return bookingRepository.findByUser(user)
                 .stream()
