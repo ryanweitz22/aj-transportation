@@ -1,16 +1,23 @@
 /**
  * admin-notifications.js — AJ Transportation
+ *
  * Polls /bookings/pending-count every 3 seconds.
- * When pending bookings exist, shows a hard modal lock forcing admin to respond.
+ * Shows a hard modal lock when pending bookings exist.
+ *
+ * FIX: Post-action pause increased from 2000ms to 3500ms to prevent the
+ * accept loop where the booking briefly re-appeared as PENDING on Supabase
+ * before the commit fully landed.
  */
 
 (function () {
-    const POLL_INTERVAL_MS = 3000;
-    let pollTimer          = null;
-    let currentPopupIds    = [];
-    let isPaused           = false;
 
-    // ── Inject modal HTML into page ───────────────────────────────────────────
+    const POLL_INTERVAL_MS  = 3000;
+    const POST_ACTION_PAUSE = 3500;
+
+    let pollTimer       = null;
+    let currentPopupIds = [];
+    let isPaused        = false;
+
     function injectModal() {
         if (document.getElementById('admin-notif-overlay')) return;
 
@@ -106,19 +113,23 @@
                 .notif-btn-accept { background: #0a7c6e; color: white; }
                 .notif-btn-reject { background: #fee2e2; color: #dc2626; }
                 .notif-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+                .notif-processing {
+                    font-size: 0.8rem; color: #6b7280;
+                    text-align: center; padding: 8px 0;
+                    font-style: italic;
+                }
             </style>
         `;
 
         document.body.appendChild(overlay);
     }
 
-    // ── Build a booking card ──────────────────────────────────────────────────
     function buildBookingCard(booking) {
         const div = document.createElement('div');
         div.className = 'notif-booking-card';
         div.id = `notif-card-${booking.id}`;
 
-        const date = new Date(booking.date + 'T00:00:00');
+        const date    = new Date(booking.date + 'T00:00:00');
         const dateStr = date.toLocaleDateString('en-ZA', {
             weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
         });
@@ -155,7 +166,6 @@
         return div;
     }
 
-    // ── Show / update the modal ───────────────────────────────────────────────
     function showModal(bookings) {
         const overlay = document.getElementById('admin-notif-overlay');
         const list    = document.getElementById('admin-notif-list');
@@ -180,59 +190,70 @@
         currentPopupIds = [];
     }
 
-    // ── Admin accept / reject ─────────────────────────────────────────────────
     window.adminRespond = async function (bookingId, action) {
         const card    = document.getElementById(`notif-card-${bookingId}`);
         const buttons = card ? card.querySelectorAll('.notif-btn') : [];
         buttons.forEach(b => b.disabled = true);
 
-        // Stop polling immediately while we process the response
+        // Show processing message so admin knows it's working
+        if (card) {
+            const msg = document.createElement('div');
+            msg.className   = 'notif-processing';
+            msg.textContent = action === 'accept' ? 'Accepting...' : 'Rejecting...';
+            card.appendChild(msg);
+        }
+
+        // Stop polling immediately
         clearInterval(pollTimer);
         pollTimer = null;
         isPaused  = true;
 
         try {
-            const csrfToken = getCsrfToken();
             const res = await fetch(`/admin/bookings/${action}/${bookingId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRF-TOKEN': csrfToken
+                    'X-CSRF-TOKEN': getCsrfToken()
                 }
             });
 
             if (res.ok || res.redirected) {
-                // Remove this card from the popup immediately
                 if (card) card.remove();
                 currentPopupIds = currentPopupIds.filter(id => id !== bookingId);
 
                 const list = document.getElementById('admin-notif-list');
-                if (!list || list.children.length === 0) {
-                    hideModal();
-                }
+                if (!list || list.children.length === 0) hideModal();
 
-                // Wait 2s for Supabase to fully commit, then resume polling
+                // Wait 3500ms before resuming — gives Supabase time to fully
+                // commit so the next poll doesn't re-show the same booking
                 setTimeout(() => {
                     isPaused  = false;
                     poll();
                     pollTimer = setInterval(poll, POLL_INTERVAL_MS);
-                }, 2000);
+                }, POST_ACTION_PAUSE);
 
             } else {
                 buttons.forEach(b => b.disabled = false);
+                if (card) {
+                    const msg = card.querySelector('.notif-processing');
+                    if (msg) msg.remove();
+                }
                 isPaused  = false;
                 pollTimer = setInterval(poll, POLL_INTERVAL_MS);
                 alert('Something went wrong. Please try again.');
             }
         } catch (e) {
             buttons.forEach(b => b.disabled = false);
+            if (card) {
+                const msg = card.querySelector('.notif-processing');
+                if (msg) msg.remove();
+            }
             isPaused  = false;
             pollTimer = setInterval(poll, POLL_INTERVAL_MS);
             alert('Network error. Please try again.');
         }
     };
 
-    // ── CSRF helper ───────────────────────────────────────────────────────────
     function getCsrfToken() {
         const input = document.querySelector('input[name="_csrf"]');
         if (input) return input.value;
@@ -241,33 +262,22 @@
         return '';
     }
 
-    // ── Poll backend ──────────────────────────────────────────────────────────
     async function poll() {
         if (isPaused) return;
         try {
             const res  = await fetch('/bookings/pending-count');
             const data = await res.json();
-
-            if (data.count > 0) {
-                showModal(data.bookings);
-            } else {
-                hideModal();
-            }
-        } catch (e) {
-            // Network error — keep polling silently
-        }
+            if (data.count > 0) showModal(data.bookings);
+            else hideModal();
+        } catch (e) {}
     }
 
-    // ── Utility ───────────────────────────────────────────────────────────────
     function escHtml(s) {
         return String(s)
-            .replace(/&/g,'&amp;')
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;');
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
         injectModal();
         poll();
