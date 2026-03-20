@@ -8,7 +8,7 @@
     const POLL_INTERVAL_MS = 3000;
     let pollTimer          = null;
     let currentPopupIds    = [];
-    let isPaused           = false; // true while waiting after admin responds
+    let isPaused           = false;
 
     // ── Inject modal HTML into page ───────────────────────────────────────────
     function injectModal() {
@@ -39,7 +39,6 @@
                 overflow-y: auto;
                 box-shadow: 0 24px 64px rgba(0,0,0,0.25);
             ">
-                <!-- Header -->
                 <div style="
                     padding: 20px 24px 16px;
                     border-bottom: 1px solid #e5e7eb;
@@ -70,8 +69,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Bookings list -->
                 <div id="admin-notif-list" style="padding: 16px 24px;"></div>
             </div>
 
@@ -98,21 +95,12 @@
                 .notif-row:last-of-type { border-bottom: none; }
                 .notif-label { color: #6b7280; font-weight: 500; }
                 .notif-value { font-weight: 600; color: #0d1117; text-align: right; max-width: 60%; }
-                .notif-actions {
-                    display: flex;
-                    gap: 10px;
-                    margin-top: 14px;
-                }
+                .notif-actions { display: flex; gap: 10px; margin-top: 14px; }
                 .notif-btn {
-                    flex: 1;
-                    padding: 10px;
-                    border-radius: 10px;
-                    border: none;
-                    font-size: 0.875rem;
-                    font-weight: 600;
+                    flex: 1; padding: 10px; border-radius: 10px; border: none;
+                    font-size: 0.875rem; font-weight: 600;
                     font-family: 'DM Sans', sans-serif;
-                    cursor: pointer;
-                    transition: opacity 0.15s;
+                    cursor: pointer; transition: opacity 0.15s;
                 }
                 .notif-btn:hover { opacity: 0.85; }
                 .notif-btn-accept { background: #0a7c6e; color: white; }
@@ -175,8 +163,6 @@
 
         const newIds = bookings.map(b => b.id).sort().join(',');
         const curIds = currentPopupIds.slice().sort().join(',');
-
-        // Don't rebuild if same IDs are already showing
         if (newIds === curIds && overlay.style.display === 'flex') return;
 
         currentPopupIds = bookings.map(b => b.id);
@@ -200,15 +186,14 @@
         const buttons = card ? card.querySelectorAll('.notif-btn') : [];
         buttons.forEach(b => b.disabled = true);
 
-        // Stop polling immediately so it doesn't re-fire during the request
+        // Stop polling immediately while we process the response
         clearInterval(pollTimer);
         pollTimer = null;
+        isPaused  = true;
 
         try {
             const csrfToken = getCsrfToken();
-            const url = `/admin/bookings/${action}/${bookingId}`;
-
-            const res = await fetch(url, {
+            const res = await fetch(`/admin/bookings/${action}/${bookingId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -217,7 +202,7 @@
             });
 
             if (res.ok || res.redirected) {
-                // Remove this card
+                // Remove this card from the popup immediately
                 if (card) card.remove();
                 currentPopupIds = currentPopupIds.filter(id => id !== bookingId);
 
@@ -226,24 +211,22 @@
                     hideModal();
                 }
 
-                // Pause 2 seconds to let Supabase commit the status change,
-                // then resume polling
-                isPaused = true;
+                // Wait 2s for Supabase to fully commit, then resume polling
                 setTimeout(() => {
-                    isPaused = false;
-                    poll(); // one immediate check after pause
+                    isPaused  = false;
+                    poll();
                     pollTimer = setInterval(poll, POLL_INTERVAL_MS);
                 }, 2000);
 
             } else {
                 buttons.forEach(b => b.disabled = false);
-                // Resume polling even on failure
+                isPaused  = false;
                 pollTimer = setInterval(poll, POLL_INTERVAL_MS);
                 alert('Something went wrong. Please try again.');
             }
         } catch (e) {
             buttons.forEach(b => b.disabled = false);
-            // Resume polling even on network error
+            isPaused  = false;
             pollTimer = setInterval(poll, POLL_INTERVAL_MS);
             alert('Network error. Please try again.');
         }

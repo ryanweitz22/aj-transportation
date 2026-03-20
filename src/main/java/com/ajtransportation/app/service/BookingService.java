@@ -76,28 +76,45 @@ public class BookingService {
         tripService.updateTripStatus(booking.getTrip().getId(), "BOOKED");
     }
 
+    /**
+     * Reject a booking.
+     * - For "User Request" on-the-fly trips: delete the booking first,
+     *   then delete the trip. This order matters — trip has a FK from booking.
+     * - For admin-created trips: mark booking REJECTED, set trip back to AVAILABLE.
+     */
     @Transactional
     public void rejectBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
-        booking.setStatus("REJECTED");
-        bookingRepository.save(booking);
+
         if ("User Request".equals(trip.getLabel())) {
+            // Delete booking first to remove the FK reference, then delete trip
+            bookingRepository.delete(booking);
             tripService.deleteTrip(trip.getId());
         } else {
+            booking.setStatus("REJECTED");
+            bookingRepository.save(booking);
             tripService.updateTripStatus(trip.getId(), "AVAILABLE");
         }
     }
 
+    /**
+     * Cancel a booking.
+     * - For "User Request" on-the-fly trips: delete the booking first,
+     *   then delete the trip.
+     * - For admin-created trips: mark booking CANCELLED, set trip back to AVAILABLE.
+     */
     @Transactional
     public void cancelBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
-        booking.setStatus("CANCELLED");
-        bookingRepository.save(booking);
+
         if ("User Request".equals(trip.getLabel())) {
+            bookingRepository.delete(booking);
             tripService.deleteTrip(trip.getId());
         } else {
+            booking.setStatus("CANCELLED");
+            bookingRepository.save(booking);
             tripService.updateTripStatus(trip.getId(), "AVAILABLE");
         }
     }
@@ -112,9 +129,15 @@ public class BookingService {
             });
     }
 
+    /**
+     * Polled every 3 seconds by the user waiting screen.
+     * Auto-cancels and frees the slot if admin hasn't responded within 60 seconds.
+     */
     @Transactional
     public String getBookingStatusForPolling(UUID bookingId) {
-        Booking booking = getBookingById(bookingId);
+        // If booking no longer exists (deleted on reject/cancel), return REJECTED
+        Booking booking = bookingRepository.findById(bookingId).orElse(null);
+        if (booking == null) return "REJECTED";
 
         if ("PENDING_APPROVAL".equals(booking.getStatus())) {
             long secondsElapsed = java.time.Duration.between(
@@ -122,11 +145,12 @@ public class BookingService {
 
             if (secondsElapsed >= 60) {
                 Trip trip = booking.getTrip();
-                booking.setStatus("CANCELLED");
-                bookingRepository.save(booking);
                 if ("User Request".equals(trip.getLabel())) {
+                    bookingRepository.delete(booking);
                     tripService.deleteTrip(trip.getId());
                 } else {
+                    booking.setStatus("CANCELLED");
+                    bookingRepository.save(booking);
                     tripService.updateTripStatus(trip.getId(), "AVAILABLE");
                 }
                 return "EXPIRED";
