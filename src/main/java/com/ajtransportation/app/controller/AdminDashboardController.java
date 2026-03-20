@@ -18,10 +18,13 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/admin/dashboard")
@@ -54,40 +57,57 @@ public class AdminDashboardController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             Model model) throws JsonProcessingException {
 
-        // Always default to today — never a past date
         LocalDate today = LocalDate.now();
+        LocalTime now   = LocalTime.now();
+
+        // Always default to today — never a past date
         if (date == null) date = today;
 
-        List<Trip> trips;
+        List<Trip> rawTrips;
         String viewLabel;
-        LocalDate rangeStart;
-        LocalDate rangeEnd;
 
         switch (view) {
             case "day" -> {
-                trips      = tripService.getTripsForDay(date);
-                viewLabel  = date.toString();
-                rangeStart = date;
-                rangeEnd   = date;
+                rawTrips  = tripService.getTripsForDay(date);
+                viewLabel = date.toString();
             }
             case "month" -> {
-                rangeStart = date.withDayOfMonth(1);
-                rangeEnd   = date.withDayOfMonth(date.lengthOfMonth());
-                trips      = tripService.getTripsForRange(rangeStart, rangeEnd);
-                viewLabel  = date.getMonth().toString() + " " + date.getYear();
+                LocalDate monthStart = date.withDayOfMonth(1);
+                LocalDate monthEnd   = date.withDayOfMonth(date.lengthOfMonth());
+                rawTrips  = tripService.getTripsForRange(monthStart, monthEnd);
+                viewLabel = date.getMonth().toString() + " " + date.getYear();
             }
             default -> {
-                LocalDate weekStart = date.with(DayOfWeek.MONDAY);
-                trips      = tripService.getTripsForWeek(weekStart);
-                date       = weekStart;
-                rangeStart = weekStart;
-                rangeEnd   = weekStart.plusDays(6);
-                viewLabel  = weekStart + " – " + weekStart.plusDays(6);
+                // Week view — start from TODAY, not Monday
+                // This means the week shows today + next 6 days
+                rawTrips  = tripService.getTripsForRange(today, today.plusDays(6));
+                date      = today;
+                viewLabel = today + " – " + today.plusDays(6);
             }
         }
 
-        // Build a map of tripId → Booking for all BOOKED trips
-        // so the template can show who booked each slot
+        // Filter logic:
+        // - Future dates: always show everything
+        // - Past dates: only show BOOKED and BLOCKED (admin needs to manage these)
+        // - Today: show BOOKED and BLOCKED always, hide AVAILABLE/PENDING that
+        //   have already passed
+        List<Trip> trips = rawTrips.stream()
+            .filter(t -> {
+                if (t.getDate().isAfter(today)) return true;
+                // Past dates — only keep BOOKED/BLOCKED
+                if (t.getDate().isBefore(today)) {
+                    return "BOOKED".equals(t.getStatus())
+                        || "BLOCKED".equals(t.getStatus());
+                }
+                // Today — BOOKED and BLOCKED always visible
+                if ("BOOKED".equals(t.getStatus())
+                    || "BLOCKED".equals(t.getStatus())) return true;
+                // Today — hide AVAILABLE/PENDING past the current time
+                return t.getStartTime().isAfter(now);
+            })
+            .collect(Collectors.toList());
+
+        // Build bookingByTripId map
         Map<UUID, Booking> bookingByTripId = new HashMap<>();
         for (Trip trip : trips) {
             if ("BOOKED".equals(trip.getStatus()) || "PENDING".equals(trip.getStatus())) {
@@ -97,10 +117,13 @@ public class AdminDashboardController {
             }
         }
 
-        // Accurate stats for the selected period
-        long availableCount = trips.stream().filter(t -> "AVAILABLE".equals(t.getStatus())).count();
-        long bookedCount    = trips.stream().filter(t -> "BOOKED".equals(t.getStatus())).count();
-        long blockedCount   = trips.stream().filter(t -> "BLOCKED".equals(t.getStatus())).count();
+        // Accurate stats
+        long availableCount = trips.stream()
+            .filter(t -> "AVAILABLE".equals(t.getStatus())).count();
+        long bookedCount    = trips.stream()
+            .filter(t -> "BOOKED".equals(t.getStatus())).count();
+        long blockedCount   = trips.stream()
+            .filter(t -> "BLOCKED".equals(t.getStatus())).count();
 
         String tripsJson = buildMapper().writeValueAsString(trips);
 
