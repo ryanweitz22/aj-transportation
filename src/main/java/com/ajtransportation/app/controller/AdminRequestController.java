@@ -28,16 +28,8 @@ public class AdminRequestController {
     }
 
     @GetMapping
-    public String listRequests(
-            @RequestParam(value = "filter", defaultValue = "pending") String filter,
-            Model model) {
-        List<TripRequest> requests = filter.equals("all")
-            ? tripRequestService.getAllRequests()
-            : tripRequestService.getPendingRequests();
-        model.addAttribute("requests", requests);
-        model.addAttribute("filter", filter);
-        model.addAttribute("pendingCount", tripRequestService.getPendingRequests().size());
-        return "admin/requests";
+    public String listRequests() {
+        return "redirect:/admin/dashboard";
     }
 
     @PostMapping("/approve/{id}")
