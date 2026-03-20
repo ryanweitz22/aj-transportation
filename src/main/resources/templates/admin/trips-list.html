@@ -3,16 +3,51 @@
       xmlns:sec="http://www.thymeleaf.org/extras/springsecurity6">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0",name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="_csrf" th:content="${_csrf.token}"/>
     <title>Manage Slots — AJ Transportation Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/style.css}">
-    <link rel="stylesheet" th:href="@{/css/bookings.css}">
+    <style>
+        .admin-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .admin-table {
+            min-width: 900px;
+        }
+        .user-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .user-cell .user-name {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--text-dark);
+        }
+        .user-cell .user-email {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .btn-disabled-cancel {
+            background: #f3f4f6;
+            color: #9ca3af;
+            border: 1px solid #e5e7eb;
+            padding: 8px 16px;
+            border-radius: 99px;
+            font-size: 0.8rem;
+            cursor: not-allowed;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+    </style>
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav class="navbar">
     <div class="nav-container">
         <a href="/admin/dashboard" class="nav-logo">
@@ -44,95 +79,177 @@
     </div>
 </nav>
 
-<div>
-  <div class="admin-page">
+<div style="padding-top:var(--nav-h);min-height:100vh;background:var(--bg);">
+<div class="admin-page">
+
     <div class="admin-header">
-      <h1 class="admin-title">Trip Slots</h1>
-      <a href="/admin/trips/new" class="btn btn-primary">+ Create New Slot</a>
+        <div>
+            <h1 class="admin-title">Manage Slots</h1>
+            <p style="color:var(--text-muted);font-size:0.9rem;">
+                Upcoming trip slots only — past slots are in Logs.
+            </p>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <a th:href="@{/bookings}" target="_blank" class="btn btn-secondary">
+                🔗 View User Calendar
+            </a>
+            <a th:href="@{/admin/trips/new}" class="btn btn-primary">
+                + Create New Slot
+            </a>
+        </div>
     </div>
 
-    <!-- Success / Error messages -->
     <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+    <div th:if="${errorMessage}"   class="alert alert-error"   th:text="${errorMessage}"></div>
 
-    <!-- Empty state -->
     <div th:if="${#lists.isEmpty(trips)}" class="empty-state">
-      <p>No trip slots found for this week. <a href="/admin/trips/new">Create one now →</a></p>
+        <p>No upcoming trip slots found.</p>
+        <a th:href="@{/admin/trips/new}" class="btn btn-primary" style="margin-top:12px;">
+            Create one now →
+        </a>
     </div>
 
-    <!-- Trips table -->
     <div th:unless="${#lists.isEmpty(trips)}" class="admin-card">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Start</th>
-            <th>End</th>
-            <th>Label / Route</th>
-            <th>Fee</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr th:each="trip : ${trips}"
-              th:classappend="${trip.status == 'BLOCKED'} ? 'row-blocked' :
-                              (${trip.status == 'BOOKED'} ? 'row-booked' : '')">
+        <div class="admin-table-wrap">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Route</th>
+                    <th>Fee</th>
+                    <th>Status</th>
+                    <th>Booked By</th>
+                    <th>Phone</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="trip : ${trips}"
+                    th:classappend="${trip.status == 'BLOCKED'} ? 'row-blocked' :
+                                    (${trip.status == 'BOOKED'}  ? 'row-booked' : '')">
 
-            <td th:text="${#temporals.format(trip.date, 'EEE dd MMM yyyy')}"></td>
-            <td th:text="${#temporals.format(trip.startTime, 'HH:mm')}"></td>
-            <td th:text="${#temporals.format(trip.endTime, 'HH:mm')}"></td>
-            <td th:text="${trip.label}"></td>
-            <td th:text="${trip.fee != null ? 'R' + trip.fee : '—'}"></td>
+                    <td th:text="${#temporals.format(trip.date,'EEE dd MMM yyyy')}"></td>
 
-            <!-- Status badge -->
-            <td>
-              <span class="status-badge"
-                    th:classappend="${trip.status == 'AVAILABLE'} ? 'badge-available' :
-                                    (${trip.status == 'BOOKED'} ? 'badge-booked' : 'badge-blocked')"
-                    th:text="${trip.status}">
-              </span>
-            </td>
+                    <!-- Safe time display -->
+                    <td>
+                        <span th:text="${#temporals.format(trip.startTime,'HH:mm')}"></span>
+                        <span th:if="${trip.endTime != null}">
+                            – <span th:text="${#temporals.format(trip.endTime,'HH:mm')}"></span>
+                        </span>
+                    </td>
 
-            <!-- Action buttons -->
-            <td class="action-cell">
+                    <!-- Route -->
+                    <td>
+                        <span th:if="${trip.pickupAddress != null and trip.dropoffAddress != null}"
+                              style="font-size:0.82rem;">
+                            <span th:text="${trip.pickupAddress}"></span>
+                            →
+                            <span th:text="${trip.dropoffAddress}"></span>
+                        </span>
+                        <span th:unless="${trip.pickupAddress != null and trip.dropoffAddress != null}"
+                              th:text="${trip.label != null ? trip.label : '—'}"></span>
+                    </td>
 
-              <!-- Block button (only for AVAILABLE slots) -->
-              <form th:if="${trip.status == 'AVAILABLE'}"
-                    th:action="@{/admin/trips/block/{id}(id=${trip.id})}"
-                    method="post" style="display:inline;">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
-                <input type="hidden" name="reason" value="Blocked by admin" />
-                <button type="submit" class="btn btn-sm btn-warning"
-                        onclick="return confirm('Block this slot?')">Block</button>
-              </form>
+                    <td th:text="${trip.fee != null ? 'R' + trip.fee : '—'}"></td>
 
-              <!-- Unblock button (only for BLOCKED slots) -->
-              <form th:if="${trip.status == 'BLOCKED'}"
-                    th:action="@{/admin/trips/unblock/{id}(id=${trip.id})}"
-                    method="post" style="display:inline;">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
-                <button type="submit" class="btn btn-sm btn-success">Unblock</button>
-              </form>
+                    <!-- Status badge -->
+                    <td>
+                        <span class="status-badge"
+                              th:classappend="${trip.status == 'AVAILABLE'} ? 'badge-available' :
+                                              (${trip.status == 'BOOKED'}   ? 'badge-booked'    :
+                                              (${trip.status == 'PENDING'}  ? 'badge-pending'   :
+                                               'badge-blocked'))"
+                              th:text="${trip.status}">
+                        </span>
+                    </td>
 
-              <!-- Delete button (only for AVAILABLE or BLOCKED — not BOOKED) -->
-              <form th:if="${trip.status != 'BOOKED'}"
-                    th:action="@{/admin/trips/delete/{id}(id=${trip.id})}"
-                    method="post" style="display:inline;">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
-                <button type="submit" class="btn btn-sm btn-danger"
-                        onclick="return confirm('Delete this trip permanently? This cannot be undone.')">
-                  Delete
-                </button>
-              </form>
+                    <!-- Booked By -->
+                    <td>
+                        <div th:if="${bookingByTripId[trip.id] != null}" class="user-cell">
+                            <span class="user-name"
+                                  th:text="${bookingByTripId[trip.id].user.username}"></span>
+                            <span class="user-email"
+                                  th:text="${bookingByTripId[trip.id].user.email}"></span>
+                        </div>
+                        <span th:unless="${bookingByTripId[trip.id] != null}"
+                              style="color:var(--text-light);">—</span>
+                    </td>
 
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                    <!-- Phone -->
+                    <td>
+                        <span th:if="${bookingByTripId[trip.id] != null
+                                       and bookingByTripId[trip.id].user.phoneNumber != null}"
+                              th:text="${bookingByTripId[trip.id].user.phoneNumber}"
+                              style="font-size:0.875rem;"></span>
+                        <span th:unless="${bookingByTripId[trip.id] != null
+                                           and bookingByTripId[trip.id].user.phoneNumber != null}"
+                              style="color:var(--text-light);">—</span>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="action-cell">
+
+                        <!-- Block — AVAILABLE only -->
+                        <form th:if="${trip.status == 'AVAILABLE'}"
+                              th:action="@{/admin/trips/block/{id}(id=${trip.id})}"
+                              method="post" style="display:inline;">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                            <input type="hidden" name="reason" value="Blocked by admin"/>
+                            <button type="submit" class="btn btn-sm btn-warning"
+                                    onclick="return confirm('Block this slot?')">Block</button>
+                        </form>
+
+                        <!-- Unblock — BLOCKED only -->
+                        <form th:if="${trip.status == 'BLOCKED'}"
+                              th:action="@{/admin/trips/unblock/{id}(id=${trip.id})}"
+                              method="post" style="display:inline;">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                            <button type="submit" class="btn btn-sm btn-success">Unblock</button>
+                        </form>
+
+                        <!-- Cancel booking — BOOKED, 1-hour rule -->
+                        <th:block th:if="${trip.status == 'BOOKED'}">
+
+                            <!-- Can cancel — trip is 1+ hour away -->
+                            <form th:if="${canCancelMap[trip.id]}"
+                                  th:action="@{/admin/trips/cancel/{id}(id=${trip.id})}"
+                                  method="post" style="display:inline;">
+                                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                                <button type="submit" class="btn btn-sm btn-danger"
+                                        onclick="return confirm('Cancel this booking? The slot will become available again.')">
+                                    Cancel Booking
+                                </button>
+                            </form>
+
+                            <!-- Cannot cancel — less than 1 hour away -->
+                            <span th:unless="${canCancelMap[trip.id]}"
+                                  class="btn-disabled-cancel"
+                                  title="Cannot cancel — trip is less than 1 hour away">
+                                🔒 Too close
+                            </span>
+
+                        </th:block>
+
+                        <!-- Delete — AVAILABLE or BLOCKED only -->
+                        <form th:if="${trip.status != 'BOOKED'}"
+                              th:action="@{/admin/trips/delete/{id}(id=${trip.id})}"
+                              method="post" style="display:inline;">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                            <button type="submit" class="btn btn-sm btn-danger"
+                                    onclick="return confirm('Delete this trip permanently?')">
+                                Delete
+                            </button>
+                        </form>
+
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
     </div>
 
-  </div>
+</div>
 </div>
 
 <script th:src="@{/js/main.js}"></script>
