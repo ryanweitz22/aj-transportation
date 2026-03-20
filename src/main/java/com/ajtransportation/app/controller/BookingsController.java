@@ -6,6 +6,7 @@ import com.ajtransportation.app.model.User;
 import com.ajtransportation.app.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -42,6 +43,16 @@ public class BookingsController {
         this.googleMapsService = googleMapsService;
     }
 
+    // ── Shared mapper — writes dates/times as ISO strings, not arrays ─────────
+    private ObjectMapper buildMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        // CRITICAL: disable WRITE_DATES_AS_TIMESTAMPS so LocalDate/LocalTime
+        // serialize as "2026-03-20" / "08:00" instead of [2026,3,20] / [8,0]
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return mapper;
+    }
+
     @GetMapping("/bookings")
     public String bookingsPage(
             @RequestParam(value = "week", required = false)
@@ -57,13 +68,12 @@ public class BookingsController {
 
         List<Trip> trips = tripService.getVisibleTripsForWeek(week);
 
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        String tripsJson = mapper.writeValueAsString(trips);
+        ObjectMapper mapper = buildMapper();
+        String tripsJson        = mapper.writeValueAsString(trips);
         String businessHoursJson = buildBusinessHoursJson(week, mapper);
 
-        model.addAttribute("tripsJson",         tripsJson);
-        model.addAttribute("businessHoursJson", businessHoursJson);
+        model.addAttribute("tripsJson",          tripsJson);
+        model.addAttribute("businessHoursJson",  businessHoursJson);
         model.addAttribute("weekStart",  week);
         model.addAttribute("weekEnd",    week.plusDays(6));
         model.addAttribute("prevWeek",   week.minusWeeks(1));
@@ -100,11 +110,6 @@ public class BookingsController {
         return result;
     }
 
-    /**
-     * GET /bookings/status/{id}
-     * Polled every 3 seconds by the user waiting screen.
-     * Also triggers auto-cancel if 60 seconds have passed with no response.
-     */
     @GetMapping("/bookings/status/{id}")
     @ResponseBody
     public Map<String, Object> bookingStatus(@PathVariable UUID id) {
@@ -118,11 +123,6 @@ public class BookingsController {
         return result;
     }
 
-    /**
-     * GET /bookings/pending-count
-     * Polled every 3 seconds by all admin pages.
-     * Returns count + details of all PENDING_APPROVAL bookings for the admin popup.
-     */
     @GetMapping("/bookings/pending-count")
     @ResponseBody
     public Map<String, Object> pendingCount() {
@@ -179,7 +179,8 @@ public class BookingsController {
                     ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
                     return "redirect:/bookings";
                 }
-                booking = bookingService.createBooking(user, UUID.fromString(tripId), pickupAddress, dropoffAddress);
+                booking = bookingService.createBooking(user, UUID.fromString(tripId),
+                        pickupAddress, dropoffAddress);
             } else {
                 if (slotDate == null || slotTime == null) {
                     ra.addFlashAttribute("errorMessage", "Invalid slot selection. Please try again.");
@@ -191,10 +192,10 @@ public class BookingsController {
                     ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
                     return "redirect:/bookings";
                 }
-                booking = bookingService.createBookingForOpenSlot(user, date, startTime, pickupAddress, dropoffAddress);
+                booking = bookingService.createBookingForOpenSlot(user, date, startTime,
+                        pickupAddress, dropoffAddress);
             }
 
-            // Redirect to waiting screen — user waits here while admin responds
             return "redirect:/bookings/waiting/" + booking.getId();
 
         } catch (RuntimeException e) {
@@ -203,10 +204,6 @@ public class BookingsController {
         }
     }
 
-    /**
-     * GET /bookings/waiting/{id}
-     * Waiting screen — shown to user after booking while admin decides.
-     */
     @GetMapping("/bookings/waiting/{id}")
     public String waitingScreen(@PathVariable UUID id,
                                 @AuthenticationPrincipal UserDetails userDetails,
@@ -240,7 +237,8 @@ public class BookingsController {
         return "redirect:/dashboard";
     }
 
-    private String buildBusinessHoursJson(LocalDate weekStart, ObjectMapper mapper) throws JsonProcessingException {
+    private String buildBusinessHoursJson(LocalDate weekStart, ObjectMapper mapper)
+            throws JsonProcessingException {
         Map<String, Object> map = new LinkedHashMap<>();
         for (int i = 0; i < 7; i++) {
             LocalDate day = weekStart.plusDays(i);
