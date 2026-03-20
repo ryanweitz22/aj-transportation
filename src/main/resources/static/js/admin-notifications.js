@@ -7,7 +7,8 @@
 (function () {
     const POLL_INTERVAL_MS = 3000;
     let pollTimer          = null;
-    let currentPopupIds    = [];  // IDs currently shown in popup
+    let currentPopupIds    = [];
+    let isPaused           = false; // true while waiting after admin responds
 
     // ── Inject modal HTML into page ───────────────────────────────────────────
     function injectModal() {
@@ -129,7 +130,6 @@
         div.className = 'notif-booking-card';
         div.id = `notif-card-${booking.id}`;
 
-        // Format date + time nicely
         const date = new Date(booking.date + 'T00:00:00');
         const dateStr = date.toLocaleDateString('en-ZA', {
             weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
@@ -173,9 +173,10 @@
         const list    = document.getElementById('admin-notif-list');
         if (!overlay || !list) return;
 
-        // Only rebuild if the set of booking IDs has changed
         const newIds = bookings.map(b => b.id).sort().join(',');
-        const curIds = currentPopupIds.sort().join(',');
+        const curIds = currentPopupIds.slice().sort().join(',');
+
+        // Don't rebuild if same IDs are already showing
         if (newIds === curIds && overlay.style.display === 'flex') return;
 
         currentPopupIds = bookings.map(b => b.id);
@@ -199,8 +200,11 @@
         const buttons = card ? card.querySelectorAll('.notif-btn') : [];
         buttons.forEach(b => b.disabled = true);
 
+        // Stop polling immediately so it doesn't re-fire during the request
+        clearInterval(pollTimer);
+        pollTimer = null;
+
         try {
-            // Get CSRF token from the page meta tag or existing form
             const csrfToken = getCsrfToken();
             const url = `/admin/bookings/${action}/${bookingId}`;
 
@@ -213,31 +217,42 @@
             });
 
             if (res.ok || res.redirected) {
-                // Remove this card from the popup
+                // Remove this card
                 if (card) card.remove();
                 currentPopupIds = currentPopupIds.filter(id => id !== bookingId);
 
-                // If no more cards — hide the modal
                 const list = document.getElementById('admin-notif-list');
                 if (!list || list.children.length === 0) {
                     hideModal();
                 }
+
+                // Pause 2 seconds to let Supabase commit the status change,
+                // then resume polling
+                isPaused = true;
+                setTimeout(() => {
+                    isPaused = false;
+                    poll(); // one immediate check after pause
+                    pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+                }, 2000);
+
             } else {
                 buttons.forEach(b => b.disabled = false);
+                // Resume polling even on failure
+                pollTimer = setInterval(poll, POLL_INTERVAL_MS);
                 alert('Something went wrong. Please try again.');
             }
         } catch (e) {
             buttons.forEach(b => b.disabled = false);
+            // Resume polling even on network error
+            pollTimer = setInterval(poll, POLL_INTERVAL_MS);
             alert('Network error. Please try again.');
         }
     };
 
     // ── CSRF helper ───────────────────────────────────────────────────────────
     function getCsrfToken() {
-        // Try to find CSRF token from any existing form on the page
         const input = document.querySelector('input[name="_csrf"]');
         if (input) return input.value;
-        // Fallback — try meta tag
         const meta = document.querySelector('meta[name="_csrf"]');
         if (meta) return meta.getAttribute('content');
         return '';
@@ -245,6 +260,7 @@
 
     // ── Poll backend ──────────────────────────────────────────────────────────
     async function poll() {
+        if (isPaused) return;
         try {
             const res  = await fetch('/bookings/pending-count');
             const data = await res.json();
@@ -271,7 +287,7 @@
     // ── Init ──────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
         injectModal();
-        poll(); // immediate first check
+        poll();
         pollTimer = setInterval(poll, POLL_INTERVAL_MS);
     });
 
