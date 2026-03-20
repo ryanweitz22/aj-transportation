@@ -9,22 +9,18 @@ import java.time.LocalTime;
 public class BusinessHoursService {
 
     public boolean isOpenDay(LocalDate date) {
-        return date.getDayOfWeek() != DayOfWeek.SUNDAY;
+        // Open every day — Sunday included
+        return true;
     }
 
     public LocalTime openTime(LocalDate date) {
-        DayOfWeek day = date.getDayOfWeek();
-        if (day == DayOfWeek.SUNDAY)   return null;
-        if (day == DayOfWeek.SATURDAY) return LocalTime.of(6, 0);
+        // 04:00 every day
         return LocalTime.of(4, 0);
     }
 
     public LocalTime closeTime(LocalDate date) {
-        DayOfWeek day = date.getDayOfWeek();
-        if (day == DayOfWeek.SUNDAY)   return null;
-        if (day == DayOfWeek.SATURDAY) return LocalTime.of(10, 0);
-        if (day == DayOfWeek.FRIDAY)   return LocalTime.of(11, 30);
-        return LocalTime.of(12, 0);
+        // 23:00 every day
+        return LocalTime.of(23, 0);
     }
 
     public boolean isWithinBusinessHours(LocalDate date, LocalTime time) {
@@ -42,7 +38,6 @@ public class BusinessHoursService {
         LocalDate today = LocalDate.now();
         if (date.isBefore(today)) return true;
         if (date.isAfter(today))  return false;
-        // Same day — check if time has already passed
         return time.isBefore(LocalTime.now());
     }
 

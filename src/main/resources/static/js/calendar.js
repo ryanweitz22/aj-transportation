@@ -7,8 +7,8 @@
  * Grey       = past / blocked / closed
  *
  * Calendar spans 04:00 → 23:00 (19 hours).
- * PX_HOUR is responsive — shrinks on smaller screens so the full
- * day fits on screen without any sidebar scrolling.
+ * Row height is fixed at a comfortable tap-friendly size.
+ * The PAGE scrolls naturally — no clipped inner scroll containers.
  */
 
 let currentWeekStart = null;
@@ -16,8 +16,8 @@ let currentWeekStart = null;
 document.addEventListener('DOMContentLoaded', function () {
     let trips = [];
     let businessHours = {};
-    try { trips = JSON.parse(TRIPS_DATA); }                    catch (e) { trips = []; }
-    try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); }   catch (e) { businessHours = {}; }
+    try { trips = JSON.parse(TRIPS_DATA); }                  catch (e) { trips = []; }
+    try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); } catch (e) { businessHours = {}; }
 
     if (typeof WEEK_START !== 'undefined' && WEEK_START) {
         currentWeekStart = parseLocalDate(WEEK_START);
@@ -45,18 +45,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// ── Responsive pixel-per-hour ──────────────────────────────────────────────────
-// Works out how tall each hour row must be so all 19 hours (04:00–23:00)
-// fit on screen with zero scrolling on the calendar body itself.
-function getResponsivePxHour() {
-    const TOTAL_HOURS = 19;
-    const viewportH   = window.innerHeight;
-    // Space consumed by navbar, page header, week-nav, legend, info-banner, padding
-    const reservedPx  = 284;
-    const available   = Math.max(viewportH - reservedPx, 300);
-    const computed    = Math.floor(available / TOTAL_HOURS);
-    // 28px = minimum on small phones, 64px = maximum on large desktop
-    return Math.max(28, Math.min(64, computed));
+// ── Row height — comfortable, tap-friendly, fixed ──────────────────────────────
+// Desktop: 56px/hr  →  tablet: 48px/hr  →  phone: 40px/hr
+// The page body scrolls; the calendar grid itself is never clipped.
+function getPxHour() {
+    const w = window.innerWidth;
+    if (w >= 1024) return 56;
+    if (w >= 640)  return 48;
+    return 40;
 }
 
 function renderCalendar(trips, businessHours, weekStart) {
@@ -76,11 +72,14 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     const CAL_START   = 4 * 60;   // 04:00 in minutes
     const CAL_END     = 23 * 60;  // 23:00 in minutes
-    const TOTAL_HOURS = 19;
-    const PX_HOUR     = getResponsivePxHour();
+    const TOTAL_HOURS = 19;       // 04:00 → 23:00
+    const PX_HOUR     = getPxHour();
     const TOTAL_H     = PX_HOUR * TOTAL_HOURS;
+    // Each open-slot pill covers 30 min
+    const SLOT_MIN    = 30;
+    const SLOT_H      = Math.max((SLOT_MIN / 60) * PX_HOUR - 3, 24);
 
-    // Dynamic style so time-label heights track PX_HOUR exactly
+    // Write responsive overrides into a <style> tag
     let styleTag = document.getElementById('cal-dynamic-style');
     if (!styleTag) {
         styleTag = document.createElement('style');
@@ -88,23 +87,38 @@ function renderCalendar(trips, businessHours, weekStart) {
         document.head.appendChild(styleTag);
     }
     styleTag.textContent = `
-        #calendar-container { min-height: unset !important; overflow: hidden !important; }
-        .calendar-body      { overflow: hidden !important; }
-        .cal-day-column     { overflow: hidden !important; }
-        .time-label         { height: ${PX_HOUR}px !important;
-                              font-size: ${PX_HOUR < 36 ? '0.58rem' : '0.68rem'} !important; }
-        .trip-slot          { min-height: ${Math.max(PX_HOUR - 4, 18)}px; }
+        /* Let the page scroll — never clip the calendar grid */
+        #calendar-container            { min-height: unset !important; overflow: visible !important; }
+        .calendar-grid                 { overflow: visible !important; }
+        .calendar-body                 { overflow: visible !important; }
+        .cal-day-column                { overflow: visible !important; }
+
+        /* Time labels track PX_HOUR */
+        .time-label { height: ${PX_HOUR}px !important; font-size: 0.72rem !important; }
+
+        /* Sticky day header sits just below the navbar */
+        .calendar-header-row { position: sticky; top: var(--nav-h, 64px); z-index: 10;
+                               background: var(--bg); border-bottom: 2px solid var(--border); }
+
+        /* Slot sizing */
+        .trip-slot { font-size: 0.78rem; padding: 5px 7px; }
+
+        /* Mobile tweaks */
         @media (max-width: 640px) {
+            .cal-day-header            { padding: 8px 3px; }
+            .cal-day-header .day-name  { font-size: 0.6rem; }
+            .cal-day-header .day-date  { font-size: 0.75rem; }
             .cal-day-header .day-month { display: none; }
-            .calendar-container { margin: 0 8px !important; }
-            .week-nav           { padding: 0 8px !important; }
-            .calendar-legend    { padding: 0 8px !important; }
+            .calendar-container        { margin: 0 6px !important; }
+            .week-nav                  { padding: 0 6px !important; }
+            .calendar-legend           { padding: 0 6px !important; }
+            .time-label                { font-size: 0.6rem !important; padding-right: 4px !important; }
         }
     `;
 
     let html = '<div class="calendar-grid">';
 
-    // ── Header row ─────────────────────────────────────────────────────────────
+    // ── Sticky header row ──────────────────────────────────────────────────────
     html += '<div class="calendar-header-row"><div class="time-gutter"></div>';
     days.forEach((day, i) => {
         const isToday = day.getTime() === today.getTime();
@@ -116,8 +130,8 @@ function renderCalendar(trips, businessHours, weekStart) {
     });
     html += '</div>';
 
-    // ── Body ───────────────────────────────────────────────────────────────────
-    html += `<div class="calendar-body" style="height:${TOTAL_H}px;">`;
+    // ── Body — full height, page scrolls ───────────────────────────────────────
+    html += `<div class="calendar-body" style="height:${TOTAL_H}px; position:relative;">`;
 
     // Time gutter 04:00 → 23:00
     html += '<div class="time-column">';
@@ -158,21 +172,20 @@ function renderCalendar(trips, businessHours, weekStart) {
                     });
                     if (!covered) {
                         const topPx   = ((t - CAL_START) / 60) * PX_HOUR;
-                        const slotH   = Math.max((30 / 60) * PX_HOUR - 2, 18);
                         const timeStr = minToTime(t);
                         const slotData = JSON.stringify({ date: dateStr, time: timeStr }).replace(/'/g, '&#39;');
                         html += `<div class="trip-slot slot-open-hours"
-                            style="top:${topPx}px;height:${slotH}px;"
+                            style="top:${topPx}px; height:${SLOT_H}px;"
                             data-open='${slotData}'
                             onclick="handleOpenSlotClick(this)"
                             role="button" tabindex="0"
-                            title="Request a trip at ${timeStr}">
+                            title="Book a trip at ${timeStr}">
                             <span class="slot-time">${timeStr}</span>
                             <span class="slot-cta">Book →</span>
                         </div>`;
                     }
                 }
-                t += 30;
+                t += SLOT_MIN;
             }
         }
 
@@ -185,7 +198,7 @@ function renderCalendar(trips, businessHours, weekStart) {
             const cs    = Math.max(s, CAL_START);
             const ce    = Math.min(e, CAL_END);
             const topPx = ((cs - CAL_START) / 60) * PX_HOUR;
-            const hPx   = Math.max(((ce - cs) / 60) * PX_HOUR, Math.max(PX_HOUR - 4, 18));
+            const hPx   = Math.max(((ce - cs) / 60) * PX_HOUR - 3, 28);
 
             const isAvailable = trip.status === 'AVAILABLE' && !isPast;
             const isPending   = trip.status === 'PENDING';
@@ -199,7 +212,7 @@ function renderCalendar(trips, businessHours, weekStart) {
                     endTime: trip.endTime || '', date: trip.date, fee: trip.fee || ''
                 }).replace(/'/g, '&#39;');
                 html += `<div class="trip-slot slot-available"
-                    style="top:${topPx}px;height:${hPx}px;"
+                    style="top:${topPx}px; height:${hPx}px;"
                     data-trip='${data}'
                     onclick="handleSlotClick(this)"
                     role="button" tabindex="0">
@@ -210,31 +223,31 @@ function renderCalendar(trips, businessHours, weekStart) {
                 </div>`;
             } else if (isPending) {
                 html += `<div class="trip-slot slot-pending"
-                    style="top:${topPx}px;height:${hPx}px;cursor:default;">
+                    style="top:${topPx}px; height:${hPx}px; cursor:default;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label || '')}</span>
                     <span class="slot-status-tag">Awaiting Approval</span>
                 </div>`;
             } else if (isBooked) {
                 html += `<div class="trip-slot slot-booked"
-                    style="top:${topPx}px;height:${hPx}px;">
+                    style="top:${topPx}px; height:${hPx}px;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label || '')}</span>
                     <span class="slot-status-tag">Booked</span>
                 </div>`;
             } else {
                 html += `<div class="trip-slot slot-blocked"
-                    style="top:${topPx}px;height:${hPx}px;">
+                    style="top:${topPx}px; height:${hPx}px;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label || '')}</span>
                 </div>`;
             }
         });
 
-        html += '</div>';
+        html += '</div>'; // end cal-day-column
     });
 
-    html += '</div></div>';
+    html += '</div></div>'; // end calendar-body + calendar-grid
     container.innerHTML = html;
 
     // Keyboard accessibility
@@ -245,15 +258,15 @@ function renderCalendar(trips, businessHours, weekStart) {
     });
 }
 
-// Re-render on resize so rows adapt to the new viewport height
+// Re-render on resize so PX_HOUR adapts (desktop/tablet/phone breakpoints)
 let _resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(_resizeTimer);
     _resizeTimer = setTimeout(() => {
         let trips = [];
         let businessHours = {};
-        try { trips = JSON.parse(TRIPS_DATA); }                    catch (e) { trips = []; }
-        try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); }   catch (e) { businessHours = {}; }
+        try { trips = JSON.parse(TRIPS_DATA); }                  catch (e) { trips = []; }
+        try { businessHours = JSON.parse(BUSINESS_HOURS_DATA); } catch (e) { businessHours = {}; }
         if (currentWeekStart) renderCalendar(trips, businessHours, currentWeekStart);
     }, 150);
 });
