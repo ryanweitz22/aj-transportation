@@ -12,19 +12,33 @@
 <body>
 <nav class="navbar">
     <div class="nav-container">
-        <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
+        <a href="/admin/dashboard" class="nav-logo">
+            <div class="logo-aj">AJ</div>
+            <span class="logo-text">Transportation</span>
+        </a>
         <div class="nav-links">
-            <a th:href="@{/admin/dashboard}">Schedule</a>
-            <a th:href="@{/admin/trips}">Trips</a>
-            <a th:href="@{/admin/requests}">Requests</a>
+            <a th:href="@{/admin/dashboard}">Bookings</a>
+            <a th:href="@{/admin/trips}">Manage Slots</a>
+            <a th:href="@{/admin/block}">Block Time</a>
             <a th:href="@{/admin/users}">Users</a>
-            <a th:href="@{/admin/logs}" class="active">Logs</a>
+            <a th:href="@{/admin/logs}">Logs</a>
         </div>
         <div class="nav-actions">
             <span class="nav-user" sec:authentication="name"></span>
             <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
         </div>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()">
+            <span></span><span></span><span></span>
+        </button>
     </div>
+    <div class="nav-mobile" id="mobileMenu">
+        <a th:href="@{/admin/dashboard}">Bookings</a>
+        <a th:href="@{/admin/trips}">Manage Slots</a>
+        <a th:href="@{/admin/block}">Block Time</a>
+        <a th:href="@{/admin/users}">Users</a>
+        <a th:href="@{/admin/logs}">Logs</a>
+        <a th:href="@{/logout}">Logout</a>
+        </div>
 </nav>
 <div style="padding-top:var(--nav-h);min-height:100vh;background:var(--bg);">
 <div class="admin-page">

@@ -15,32 +15,33 @@
 <!-- NAVBAR -->
 <nav class="navbar">
     <div class="nav-container">
-        <a href="/" class="nav-logo"><div class="logo-aj">AJ</div><span class="logo-text">Transportation</span></a>
+        <a href="/admin/dashboard" class="nav-logo">
+            <div class="logo-aj">AJ</div>
+            <span class="logo-text">Transportation</span>
+        </a>
         <div class="nav-links">
-            <a th:href="@{/}">Home</a>
-            <a th:href="@{/bookings}" class="active">Bookings</a>
-            <a th:href="@{/about}">About</a>
-            <a th:href="@{/contact}">Contact</a>
+            <a th:href="@{/admin/dashboard}">Bookings</a>
+            <a th:href="@{/admin/trips}">Manage Slots</a>
+            <a th:href="@{/admin/block}">Block Time</a>
+            <a th:href="@{/admin/users}">Users</a>
+            <a th:href="@{/admin/logs}">Logs</a>
         </div>
         <div class="nav-actions">
-            <div sec:authorize="isAuthenticated()" style="display:flex;align-items:center;gap:10px;">
-                <span class="nav-user" sec:authentication="name"></span>
-                <a th:href="@{/dashboard}" class="btn-nav-dash">Dashboard</a>
-                <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
-            </div>
-            <div sec:authorize="isAnonymous()" style="display:flex;align-items:center;gap:10px;">
-                <a th:href="@{/login}" class="btn-nav-login">Login</a>
-                <a th:href="@{/register}" class="btn-nav-register">Book Now</a>
-            </div>
+            <span class="nav-user" sec:authentication="name"></span>
+            <a th:href="@{/logout}" class="btn-nav-logout">Logout</a>
         </div>
-        <button class="nav-hamburger" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
+        <button class="nav-hamburger" onclick="toggleMobileMenu()">
+            <span></span><span></span><span></span>
+        </button>
     </div>
     <div class="nav-mobile" id="mobileMenu">
-        <a th:href="@{/}">Home</a>
-        <a th:href="@{/bookings}">Bookings</a>
-        <a th:href="@{/about}">About</a>
-        <a th:href="@{/contact}">Contact</a>
-    </div>
+        <a th:href="@{/admin/dashboard}">Bookings</a>
+        <a th:href="@{/admin/trips}">Manage Slots</a>
+        <a th:href="@{/admin/block}">Block Time</a>
+        <a th:href="@{/admin/users}">Users</a>
+        <a th:href="@{/admin/logs}">Logs</a>
+        <a th:href="@{/logout}">Logout</a>
+        </div>
 </nav>
 
 <div>
