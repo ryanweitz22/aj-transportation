@@ -16,7 +16,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -60,7 +59,6 @@ public class AdminDashboardController {
         LocalDate today = LocalDate.now();
         LocalTime now   = LocalTime.now();
 
-        // Always default to today — never a past date
         if (date == null) date = today;
 
         List<Trip> rawTrips;
@@ -78,51 +76,41 @@ public class AdminDashboardController {
                 viewLabel = date.getMonth().toString() + " " + date.getYear();
             }
             default -> {
-                // Week view — start from TODAY, not Monday
-                // This means the week shows today + next 6 days
+                // Week view starts from TODAY not Monday
                 rawTrips  = tripService.getTripsForRange(today, today.plusDays(6));
                 date      = today;
                 viewLabel = today + " – " + today.plusDays(6);
             }
         }
 
-        // Filter logic:
-        // - Future dates: always show everything
-        // - Past dates: only show BOOKED and BLOCKED (admin needs to manage these)
-        // - Today: show BOOKED and BLOCKED always, hide AVAILABLE/PENDING that
-        //   have already passed
+        // Filter — identical logic to Manage Slots:
+        // Past dates → always hidden
+        // Today → only show trips whose start time is still in the future
+        // Future dates → always show
         List<Trip> trips = rawTrips.stream()
             .filter(t -> {
-                if (t.getDate().isAfter(today)) return true;
-                // Past dates — only keep BOOKED/BLOCKED
-                if (t.getDate().isBefore(today)) {
-                    return "BOOKED".equals(t.getStatus())
-                        || "BLOCKED".equals(t.getStatus());
-                }
-                // Today — BOOKED and BLOCKED always visible
-                if ("BOOKED".equals(t.getStatus())
-                    || "BLOCKED".equals(t.getStatus())) return true;
-                // Today — hide AVAILABLE/PENDING past the current time
+                if (t.getDate().isBefore(today)) return false;
+                if (t.getDate().isAfter(today))  return true;
                 return t.getStartTime().isAfter(now);
             })
             .collect(Collectors.toList());
 
-        // Build bookingByTripId map
+        // Build bookingByTripId map for BOOKED/PENDING trips
         Map<UUID, Booking> bookingByTripId = new HashMap<>();
         for (Trip trip : trips) {
-            if ("BOOKED".equals(trip.getStatus()) || "PENDING".equals(trip.getStatus())) {
+            if ("BOOKED".equals(trip.getStatus())
+                || "PENDING".equals(trip.getStatus())) {
                 bookingRepository
                     .findByTripIdAndStatusNot(trip.getId(), "CANCELLED")
                     .ifPresent(b -> bookingByTripId.put(trip.getId(), b));
             }
         }
 
-        // Accurate stats
         long availableCount = trips.stream()
             .filter(t -> "AVAILABLE".equals(t.getStatus())).count();
-        long bookedCount    = trips.stream()
+        long bookedCount = trips.stream()
             .filter(t -> "BOOKED".equals(t.getStatus())).count();
-        long blockedCount   = trips.stream()
+        long blockedCount = trips.stream()
             .filter(t -> "BLOCKED".equals(t.getStatus())).count();
 
         String tripsJson = buildMapper().writeValueAsString(trips);
