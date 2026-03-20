@@ -1,12 +1,17 @@
 /**
  * calendar.js — AJ Transportation
- * Teal/ghost = open business hours slot → click to book
- * Green      = AVAILABLE trip created by admin → click to book
- * Amber      = PENDING trip → awaiting admin approval, not bookable
- * Red        = BOOKED trip → taken
- * Grey       = past / blocked / closed
  *
- * Calendar spans 04:00 → 23:00 (19 hours).
+ * Slot colour key:
+ *   Teal/ghost  = open business hours → click to book
+ *   Green       = AVAILABLE admin trip → click to book
+ *   Amber       = PENDING trip → not bookable
+ *   Red         = BOOKED trip → taken
+ *   Grey        = BLOCKED / past / closed → not bookable
+ *
+ * FIX: BLOCKED trips are now included in the trips data sent from the server
+ * (TripService.getVisibleTripsForWeek no longer filters them out).
+ * The JS renders them as grey "Unavailable" tiles AND uses them to suppress
+ * ghost slots — so a blocked time can no longer appear as a bookable teal slot.
  */
 
 let currentWeekStart = null;
@@ -53,9 +58,9 @@ function renderCalendar(trips, businessHours, weekStart) {
     const container = document.getElementById('calendar-container');
     if (!container) return;
 
-    const today = new Date(); today.setHours(0,0,0,0);
-    const DAY_NAMES   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const today      = new Date(); today.setHours(0,0,0,0);
+    const DAY_NAMES  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const MONTH_NAMES= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     const days = [];
     for (let i = 0; i < 7; i++) {
@@ -64,8 +69,8 @@ function renderCalendar(trips, businessHours, weekStart) {
         days.push(d);
     }
 
-    const CAL_START   = 4 * 60;
-    const CAL_END     = 23 * 60;
+    const CAL_START   = 4 * 60;   // 04:00
+    const CAL_END     = 23 * 60;  // 23:00
     const TOTAL_HOURS = 19;
     const PX_HOUR     = getPxHour();
     const TOTAL_H     = PX_HOUR * TOTAL_HOURS;
@@ -101,6 +106,7 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     let html = '<div class="calendar-grid">';
 
+    // ── Header row ────────────────────────────────────────────────────────────
     html += '<div class="calendar-header-row"><div class="time-gutter"></div>';
     days.forEach((day, i) => {
         const isToday = day.getTime() === today.getTime();
@@ -114,12 +120,14 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     html += `<div class="calendar-body" style="height:${TOTAL_H}px; position:relative;">`;
 
+    // ── Time column ───────────────────────────────────────────────────────────
     html += '<div class="time-column">';
     for (let h = 4; h <= 23; h++) {
         html += `<div class="time-label" style="height:${PX_HOUR}px;">${String(h).padStart(2,'0')}:00</div>`;
     }
     html += '</div>';
 
+    // ── Day columns ───────────────────────────────────────────────────────────
     days.forEach(day => {
         const dateStr  = formatDate(day);
         const isPast   = day < today;
@@ -134,27 +142,33 @@ function renderCalendar(trips, businessHours, weekStart) {
 
         html += `<div class="cal-day-column ${isPast ? 'past-col' : ''}" style="height:${TOTAL_H}px;">`;
 
+        // Hour lines
         for (let h = 0; h <= TOTAL_HOURS; h++) {
             html += `<div class="hour-line" style="top:${h * PX_HOUR}px;"></div>`;
         }
 
-        // ── Open business hours ghost slots ────────────────────────────────────
+        // ── Ghost / open-hours slots ─────────────────────────────────────────
+        // A ghost slot is suppressed if ANY trip (any status — including BLOCKED)
+        // covers that 30-min window.  Previously only non-BLOCKED trips were in
+        // dayTrips, so BLOCKED trips leaked through as bookable teal slots.
         if (!isPast && isOpen) {
             let t = bhOpen;
             while (t < bhClose) {
                 if (t >= CAL_START && t < CAL_END) {
                     const covered = dayTrips.some(trip => {
                         const s = timeToMin(trip.startTime);
-                        // FIX: if no endTime, cover through end of business hours
-                        // so BOOKED/PENDING trips without endTime don't leave ghost slots
+                        // AVAILABLE with no endTime → assume 60-min window.
+                        // All other statuses (PENDING, BOOKED, BLOCKED) with no
+                        // endTime → cover through end of business hours so the
+                        // ghost slot is fully suppressed for that day.
                         const e = trip.endTime
                             ? timeToMin(trip.endTime)
                             : (trip.status === 'AVAILABLE' ? s + 60 : bhClose);
                         return t >= s && t < e;
                     });
                     if (!covered) {
-                        const topPx   = ((t - CAL_START) / 60) * PX_HOUR;
-                        const timeStr = minToTime(t);
+                        const topPx    = ((t - CAL_START) / 60) * PX_HOUR;
+                        const timeStr  = minToTime(t);
                         const slotData = JSON.stringify({ date: dateStr, time: timeStr }).replace(/'/g, '&#39;');
                         html += `<div class="trip-slot slot-open-hours"
                             style="top:${topPx}px; height:${SLOT_H}px;"
@@ -171,7 +185,7 @@ function renderCalendar(trips, businessHours, weekStart) {
             }
         }
 
-        // ── Admin-created trips ────────────────────────────────────────────────
+        // ── Admin-created trips (ALL statuses rendered) ──────────────────────
         dayTrips.forEach(trip => {
             const s = timeToMin(trip.startTime);
             const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
@@ -185,6 +199,7 @@ function renderCalendar(trips, businessHours, weekStart) {
             const isAvailable = trip.status === 'AVAILABLE' && !isPast;
             const isPending   = trip.status === 'PENDING';
             const isBooked    = trip.status === 'BOOKED';
+            const isBlocked   = trip.status === 'BLOCKED';
             const fee         = trip.fee ? `R${parseFloat(trip.fee).toFixed(2)}` : '';
             const endLbl      = trip.endTime ? ` – ${trip.endTime}` : '';
 
@@ -217,10 +232,17 @@ function renderCalendar(trips, businessHours, weekStart) {
                     <span class="slot-label">${escHtml(trip.label || '')}</span>
                     <span class="slot-status-tag">Booked</span>
                 </div>`;
-            } else {
-                // BLOCKED
+            } else if (isBlocked) {
+                // Grey — not clickable, ghost slot underneath is suppressed
                 html += `<div class="trip-slot slot-blocked"
-                    style="top:${topPx}px; height:${hPx}px;">
+                    style="top:${topPx}px; height:${hPx}px; cursor:not-allowed;">
+                    <span class="slot-time">${trip.startTime}${endLbl}</span>
+                    <span class="slot-status-tag">Unavailable</span>
+                </div>`;
+            } else {
+                // Past AVAILABLE trip — render as grey
+                html += `<div class="trip-slot slot-blocked"
+                    style="top:${topPx}px; height:${hPx}px; cursor:default;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label || '')}</span>
                 </div>`;
