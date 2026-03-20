@@ -20,7 +20,6 @@ public class Booking {
     @JoinColumn(name = "trip_id", nullable = false)
     private Trip trip;
 
-    // PENDING_APPROVAL → CONFIRMED (admin accepted) or REJECTED (admin rejected) or CANCELLED (user cancelled)
     @Column(name = "status", nullable = false)
     private String status;
 
@@ -35,8 +34,6 @@ public class Booking {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
-    // ── Getters & Setters ─────────────────────────────────────────────────────
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
