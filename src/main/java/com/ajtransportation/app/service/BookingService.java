@@ -5,7 +5,6 @@ import com.ajtransportation.app.model.Trip;
 import com.ajtransportation.app.model.User;
 import com.ajtransportation.app.repository.BookingRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -26,7 +25,7 @@ public class BookingService {
         this.tripService = tripService;
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public Booking createBooking(User user, UUID tripId, String pickupAddress, String dropoffAddress) {
         if (!tripService.isTripAvailable(tripId)) {
             throw new RuntimeException("Sorry, that slot is no longer available.");
@@ -51,7 +50,7 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public Booking createBookingForOpenSlot(User user, LocalDate date, LocalTime startTime,
                                              String pickupAddress, String dropoffAddress) {
         Trip trip = tripService.createOnTheFlyTrip(date, startTime, pickupAddress, dropoffAddress);
@@ -68,7 +67,7 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public void acceptBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         booking.setStatus("CONFIRMED");
@@ -77,7 +76,7 @@ public class BookingService {
         tripService.updateTripStatus(booking.getTrip().getId(), "BOOKED");
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public void rejectBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
@@ -90,7 +89,7 @@ public class BookingService {
         }
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public void cancelBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
@@ -103,7 +102,7 @@ public class BookingService {
         }
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public void cancelBookingByTripId(UUID tripId) {
         bookingRepository.findByTripIdAndStatusNot(tripId, "CANCELLED")
             .ifPresent(booking -> {
@@ -113,7 +112,7 @@ public class BookingService {
             });
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public String getBookingStatusForPolling(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
 
@@ -137,23 +136,19 @@ public class BookingService {
         return booking.getStatus();
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Booking> getPendingBookings() {
         return bookingRepository.findByStatusOrderByCreatedAtAsc("PENDING_APPROVAL");
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public Booking getBookingById(UUID id) {
         return bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public List<Booking> getUserBookings(User user) {
         return bookingRepository.findByUserOrderByCreatedAtDesc(user);
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public long countActiveBookings(User user) {
         return bookingRepository.findByUser(user)
                 .stream()
@@ -161,7 +156,7 @@ public class BookingService {
                 .count();
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
+    @Transactional
     public void confirmBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         booking.setStatus("CONFIRMED");
