@@ -20,6 +20,9 @@ public class BookingService {
 
     private static final List<String> INACTIVE_STATUSES = List.of("CANCELLED", "REJECTED");
 
+    // Increased from 60s to 120s to allow for Supabase latency under load
+    private static final int EXPIRY_SECONDS = 120;
+
     public BookingService(BookingRepository bookingRepository, TripService tripService) {
         this.bookingRepository = bookingRepository;
         this.tripService = tripService;
@@ -76,19 +79,13 @@ public class BookingService {
         tripService.updateTripStatus(booking.getTrip().getId(), "BOOKED");
     }
 
-    /**
-     * Reject a booking.
-     * - For "User Request" on-the-fly trips: delete the booking first,
-     *   then delete the trip. This order matters — trip has a FK from booking.
-     * - For admin-created trips: mark booking REJECTED, set trip back to AVAILABLE.
-     */
     @Transactional
     public void rejectBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
         Trip trip = booking.getTrip();
 
         if ("User Request".equals(trip.getLabel())) {
-            // Delete booking first to remove the FK reference, then delete trip
+            // Delete booking first (removes FK reference), then delete trip
             bookingRepository.delete(booking);
             tripService.deleteTrip(trip.getId());
         } else {
@@ -98,12 +95,6 @@ public class BookingService {
         }
     }
 
-    /**
-     * Cancel a booking.
-     * - For "User Request" on-the-fly trips: delete the booking first,
-     *   then delete the trip.
-     * - For admin-created trips: mark booking CANCELLED, set trip back to AVAILABLE.
-     */
     @Transactional
     public void cancelBooking(UUID bookingId) {
         Booking booking = getBookingById(bookingId);
@@ -129,13 +120,9 @@ public class BookingService {
             });
     }
 
-    /**
-     * Polled every 3 seconds by the user waiting screen.
-     * Auto-cancels and frees the slot if admin hasn't responded within 60 seconds.
-     */
     @Transactional
     public String getBookingStatusForPolling(UUID bookingId) {
-        // If booking no longer exists (deleted on reject/cancel), return REJECTED
+        // Booking deleted (rejected on-the-fly trip) — tell user it was rejected
         Booking booking = bookingRepository.findById(bookingId).orElse(null);
         if (booking == null) return "REJECTED";
 
@@ -143,7 +130,7 @@ public class BookingService {
             long secondsElapsed = java.time.Duration.between(
                 booking.getCreatedAt(), LocalDateTime.now()).getSeconds();
 
-            if (secondsElapsed >= 60) {
+            if (secondsElapsed >= EXPIRY_SECONDS) {
                 Trip trip = booking.getTrip();
                 if ("User Request".equals(trip.getLabel())) {
                     bookingRepository.delete(booking);
