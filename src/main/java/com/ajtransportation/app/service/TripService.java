@@ -43,8 +43,19 @@ public class TripService {
         return tripRepository.findByDateBetween(from, to);
     }
 
+    /**
+     * Returns ALL trips for the week including BLOCKED ones.
+     *
+     * Previously this used findByDateBetweenAndStatusNot(..., "BLOCKED") which
+     * excluded BLOCKED trips entirely. When a blocked trip was excluded, the
+     * ghost-slot logic in calendar.js saw nothing covering that time and rendered
+     * a bookable teal slot there — making blocked times appear available to users.
+     *
+     * Fix: return every status. The JS calendar renders BLOCKED as grey and
+     * suppresses ghost slots for that time window.
+     */
     public List<Trip> getVisibleTripsForWeek(LocalDate weekStart) {
-        return tripRepository.findByDateBetweenAndStatusNot(weekStart, weekStart.plusDays(6), "BLOCKED");
+        return tripRepository.findByDateBetween(weekStart, weekStart.plusDays(6));
     }
 
     public Trip getTripById(UUID id) {
