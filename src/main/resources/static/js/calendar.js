@@ -1,17 +1,9 @@
 /**
  * calendar.js — AJ Transportation
  *
- * Slot colour key:
- *   Teal/ghost  = open business hours → click to book
- *   Green       = AVAILABLE admin trip → click to book
- *   Amber       = PENDING trip → not bookable
- *   Red         = BOOKED trip → taken
- *   Grey        = BLOCKED / past / closed → not bookable
- *
- * FIX: BLOCKED trips are now included in the trips data sent from the server
- * (TripService.getVisibleTripsForWeek no longer filters them out).
- * The JS renders them as grey "Unavailable" tiles AND uses them to suppress
- * ghost slots — so a blocked time can no longer appear as a bookable teal slot.
+ * Calendar always starts from today and shows 7 days forward.
+ * Past days are hidden entirely.
+ * Past time slots on today are greyed out relative to current time.
  */
 
 let currentWeekStart = null;
@@ -25,7 +17,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof WEEK_START !== 'undefined' && WEEK_START) {
         currentWeekStart = parseLocalDate(WEEK_START);
     } else {
-        currentWeekStart = getMondayOf(new Date());
+        currentWeekStart = new Date();
+        currentWeekStart.setHours(0,0,0,0);
     }
 
     renderCalendar(trips, businessHours, currentWeekStart);
@@ -39,7 +32,8 @@ document.addEventListener('DOMContentLoaded', function () {
         for (let i = 0; i < 12; i++) {
             const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
             const opt = document.createElement('option');
-            opt.value = formatDate(getMondayOf(d));
+            // Jump to that calendar date directly, not Monday of that week
+            opt.value = formatDate(d);
             opt.textContent = MONTHS[d.getMonth()] + ' ' + d.getFullYear();
             if (i === 0) opt.selected = true;
             monthSel.appendChild(opt);
@@ -58,24 +52,36 @@ function renderCalendar(trips, businessHours, weekStart) {
     const container = document.getElementById('calendar-container');
     if (!container) return;
 
+    const now        = new Date();
     const today      = new Date(); today.setHours(0,0,0,0);
-    const DAY_NAMES  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const MONTH_NAMES= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+    // Build exactly 7 days starting from weekStart
+    // Skip any days before today
     const days = [];
     for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
-        days.push(d);
+        // Only include today and future days
+        if (d >= today) days.push(d);
     }
 
-    const CAL_START   = 4 * 60;   // 04:00
-    const CAL_END     = 23 * 60;  // 23:00
+    if (days.length === 0) {
+        container.innerHTML = '<p style="padding:24px;color:var(--text-muted);">No upcoming days in this range.</p>';
+        return;
+    }
+
+    const CAL_START   = 4 * 60;
+    const CAL_END     = 23 * 60;
     const TOTAL_HOURS = 19;
     const PX_HOUR     = getPxHour();
     const TOTAL_H     = PX_HOUR * TOTAL_HOURS;
     const SLOT_MIN    = 30;
     const SLOT_H      = Math.max((SLOT_MIN / 60) * PX_HOUR - 3, 24);
+
+    // Current time in minutes for greying out past slots on today
+    const nowMinutes  = now.getHours() * 60 + now.getMinutes();
 
     let styleTag = document.getElementById('cal-dynamic-style');
     if (!styleTag) {
@@ -92,6 +98,13 @@ function renderCalendar(trips, businessHours, weekStart) {
         .calendar-header-row { position: sticky; top: var(--nav-h, 64px); z-index: 10;
                                background: var(--bg); border-bottom: 2px solid var(--border); }
         .trip-slot { font-size: 0.78rem; padding: 5px 7px; }
+        .slot-past-today {
+            background: #f3f4f6 !important;
+            border: 1px solid #e5e7eb !important;
+            color: #9ca3af !important;
+            cursor: not-allowed !important;
+            pointer-events: none !important;
+        }
         @media (max-width: 640px) {
             .cal-day-header            { padding: 8px 3px; }
             .cal-day-header .day-name  { font-size: 0.6rem; }
@@ -108,11 +121,10 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     // ── Header row ────────────────────────────────────────────────────────────
     html += '<div class="calendar-header-row"><div class="time-gutter"></div>';
-    days.forEach((day, i) => {
+    days.forEach(day => {
         const isToday = day.getTime() === today.getTime();
-        const isPast  = day < today;
-        html += `<div class="cal-day-header ${isToday ? 'today' : ''} ${isPast && !isToday ? 'past-day' : ''}">
-            <span class="day-name">${DAY_NAMES[i]}</span>
+        html += `<div class="cal-day-header ${isToday ? 'today' : ''}">
+            <span class="day-name">${DAY_NAMES[day.getDay()]}</span>
             <span class="day-date">${day.getDate()} <span class="day-month">${MONTH_NAMES[day.getMonth()]}</span></span>
         </div>`;
     });
@@ -129,9 +141,9 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     // ── Day columns ───────────────────────────────────────────────────────────
     days.forEach(day => {
-        const dateStr  = formatDate(day);
-        const isPast   = day < today;
-        const dayTrips = trips
+        const dateStr   = formatDate(day);
+        const isToday   = day.getTime() === today.getTime();
+        const dayTrips  = trips
             .filter(t => t.date === dateStr)
             .sort((a, b) => timeToMin(a.startTime) - timeToMin(b.startTime));
 
@@ -140,52 +152,58 @@ function renderCalendar(trips, businessHours, weekStart) {
         const bhClose = bh.close ? timeToMin(bh.close) : null;
         const isOpen  = bhOpen !== null && bhClose !== null;
 
-        html += `<div class="cal-day-column ${isPast ? 'past-col' : ''}" style="height:${TOTAL_H}px;">`;
+        html += `<div class="cal-day-column" style="height:${TOTAL_H}px;">`;
 
-        // Hour lines
         for (let h = 0; h <= TOTAL_HOURS; h++) {
             html += `<div class="hour-line" style="top:${h * PX_HOUR}px;"></div>`;
         }
 
-        // ── Ghost / open-hours slots ─────────────────────────────────────────
-        // A ghost slot is suppressed if ANY trip (any status — including BLOCKED)
-        // covers that 30-min window.  Previously only non-BLOCKED trips were in
-        // dayTrips, so BLOCKED trips leaked through as bookable teal slots.
-        if (!isPast && isOpen) {
+        // ── Ghost / open-hours slots ──────────────────────────────────────────
+        if (isOpen) {
             let t = bhOpen;
             while (t < bhClose) {
                 if (t >= CAL_START && t < CAL_END) {
+
+                    // On today, grey out slots that are in the past
+                    const isPastTime = isToday && t < nowMinutes;
+
                     const covered = dayTrips.some(trip => {
                         const s = timeToMin(trip.startTime);
-                        // AVAILABLE with no endTime → assume 60-min window.
-                        // All other statuses (PENDING, BOOKED, BLOCKED) with no
-                        // endTime → cover through end of business hours so the
-                        // ghost slot is fully suppressed for that day.
                         const e = trip.endTime
                             ? timeToMin(trip.endTime)
                             : (trip.status === 'AVAILABLE' ? s + 60 : bhClose);
                         return t >= s && t < e;
                     });
+
                     if (!covered) {
-                        const topPx    = ((t - CAL_START) / 60) * PX_HOUR;
-                        const timeStr  = minToTime(t);
-                        const slotData = JSON.stringify({ date: dateStr, time: timeStr }).replace(/'/g, '&#39;');
-                        html += `<div class="trip-slot slot-open-hours"
-                            style="top:${topPx}px; height:${SLOT_H}px;"
-                            data-open='${slotData}'
-                            onclick="handleOpenSlotClick(this)"
-                            role="button" tabindex="0"
-                            title="Book a trip at ${timeStr}">
-                            <span class="slot-time">${timeStr}</span>
-                            <span class="slot-cta">Book →</span>
-                        </div>`;
+                        const topPx   = ((t - CAL_START) / 60) * PX_HOUR;
+                        const timeStr = minToTime(t);
+
+                        if (isPastTime) {
+                            // Grey out past slots on today — not clickable
+                            html += `<div class="trip-slot slot-past-today"
+                                style="top:${topPx}px; height:${SLOT_H}px;">
+                                <span class="slot-time">${timeStr}</span>
+                            </div>`;
+                        } else {
+                            const slotData = JSON.stringify({ date: dateStr, time: timeStr }).replace(/'/g, '&#39;');
+                            html += `<div class="trip-slot slot-open-hours"
+                                style="top:${topPx}px; height:${SLOT_H}px;"
+                                data-open='${slotData}'
+                                onclick="handleOpenSlotClick(this)"
+                                role="button" tabindex="0"
+                                title="Book a trip at ${timeStr}">
+                                <span class="slot-time">${timeStr}</span>
+                                <span class="slot-cta">Book →</span>
+                            </div>`;
+                        }
                     }
                 }
                 t += SLOT_MIN;
             }
         }
 
-        // ── Admin-created trips (ALL statuses rendered) ──────────────────────
+        // ── Admin-created trips ───────────────────────────────────────────────
         dayTrips.forEach(trip => {
             const s = timeToMin(trip.startTime);
             const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
@@ -196,14 +214,23 @@ function renderCalendar(trips, businessHours, weekStart) {
             const topPx = ((cs - CAL_START) / 60) * PX_HOUR;
             const hPx   = Math.max(((ce - cs) / 60) * PX_HOUR - 3, 28);
 
-            const isAvailable = trip.status === 'AVAILABLE' && !isPast;
+            // On today, grey out trips that are entirely in the past
+            const isPastTime = isToday && e <= nowMinutes;
+
+            const isAvailable = trip.status === 'AVAILABLE' && !isPastTime;
             const isPending   = trip.status === 'PENDING';
             const isBooked    = trip.status === 'BOOKED';
             const isBlocked   = trip.status === 'BLOCKED';
             const fee         = trip.fee ? `R${parseFloat(trip.fee).toFixed(2)}` : '';
             const endLbl      = trip.endTime ? ` – ${trip.endTime}` : '';
 
-            if (isAvailable) {
+            if (isPastTime) {
+                html += `<div class="trip-slot slot-past-today"
+                    style="top:${topPx}px; height:${hPx}px;">
+                    <span class="slot-time">${trip.startTime}${endLbl}</span>
+                    <span class="slot-label">${escHtml(trip.label || '')}</span>
+                </div>`;
+            } else if (isAvailable) {
                 const data = JSON.stringify({
                     id: trip.id, label: trip.label || '', startTime: trip.startTime,
                     endTime: trip.endTime || '', date: trip.date, fee: trip.fee || ''
@@ -233,18 +260,10 @@ function renderCalendar(trips, businessHours, weekStart) {
                     <span class="slot-status-tag">Booked</span>
                 </div>`;
             } else if (isBlocked) {
-                // Grey — not clickable, ghost slot underneath is suppressed
                 html += `<div class="trip-slot slot-blocked"
                     style="top:${topPx}px; height:${hPx}px; cursor:not-allowed;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-status-tag">Unavailable</span>
-                </div>`;
-            } else {
-                // Past AVAILABLE trip — render as grey
-                html += `<div class="trip-slot slot-blocked"
-                    style="top:${topPx}px; height:${hPx}px; cursor:default;">
-                    <span class="slot-time">${trip.startTime}${endLbl}</span>
-                    <span class="slot-label">${escHtml(trip.label || '')}</span>
                 </div>`;
             }
         });
@@ -323,10 +342,11 @@ function closeAllModals() {
 
 function updateNavButtons() {
     const prev = document.getElementById('prevWeekBtn');
-    const next = document.getElementById('nextWeekBtn');
-    if (!prev || !next) return;
-    const todayMon = getMondayOf(new Date());
-    if (currentWeekStart <= todayMon) {
+    if (!prev) return;
+    // Prev button disabled when we're already on today's window
+    const todayStr = formatDate(new Date());
+    const startStr = formatDate(currentWeekStart);
+    if (startStr <= todayStr) {
         prev.classList.add('btn-disabled');
         prev.setAttribute('aria-disabled', 'true');
     } else {
@@ -347,8 +367,8 @@ function goToNextWeek() {
     navigateToWeek(n);
 }
 
-function navigateToWeek(monday) {
-    window.location.href = '/bookings?week=' + formatDate(monday);
+function navigateToWeek(date) {
+    window.location.href = '/bookings?week=' + formatDate(date);
 }
 
 function jumpToMonth(weekStr) {
@@ -359,5 +379,4 @@ function timeToMin(t)      { if (!t) return 0; const [h, m] = String(t).split(':
 function minToTime(m)      { return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 function formatDate(d)     { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function parseLocalDate(s) { if (!s) return new Date(); const [y, mo, d] = String(s).split('-').map(Number); return new Date(y, mo - 1, d); }
-function getMondayOf(d)    { const x = new Date(d); x.setHours(0,0,0,0); const day = x.getDay(); x.setDate(x.getDate() + (day === 0 ? -6 : 1 - day)); return x; }
 function escHtml(s)        { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }

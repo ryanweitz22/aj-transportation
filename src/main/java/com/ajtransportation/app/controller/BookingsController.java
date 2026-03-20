@@ -15,7 +15,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.LinkedHashMap;
@@ -43,12 +42,9 @@ public class BookingsController {
         this.googleMapsService = googleMapsService;
     }
 
-    // ── Shared mapper — writes dates/times as ISO strings, not arrays ─────────
     private ObjectMapper buildMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
-        // CRITICAL: disable WRITE_DATES_AS_TIMESTAMPS so LocalDate/LocalTime
-        // serialize as "2026-03-20" / "08:00" instead of [2026,3,20] / [8,0]
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         return mapper;
     }
@@ -59,27 +55,31 @@ public class BookingsController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate week,
             Model model) throws JsonProcessingException {
 
-        if (week == null) week = LocalDate.now().with(DayOfWeek.MONDAY);
+        // Default to today — calendar always starts from the current day
+        LocalDate today = LocalDate.now();
+        if (week == null) week = today;
 
-        LocalDate minWeek = LocalDate.now().with(DayOfWeek.MONDAY);
-        LocalDate maxWeek = businessHoursService.maxBookingDate().with(DayOfWeek.MONDAY);
-        if (week.isBefore(minWeek)) week = minWeek;
-        if (week.isAfter(maxWeek))  week = maxWeek;
+        // Don't allow navigating before today
+        if (week.isBefore(today)) week = today;
+
+        // Don't allow navigating more than 1 year ahead
+        LocalDate maxStart = businessHoursService.maxBookingDate().minusDays(6);
+        if (week.isAfter(maxStart)) week = maxStart;
 
         List<Trip> trips = tripService.getVisibleTripsForWeek(week);
 
         ObjectMapper mapper = buildMapper();
-        String tripsJson        = mapper.writeValueAsString(trips);
+        String tripsJson         = mapper.writeValueAsString(trips);
         String businessHoursJson = buildBusinessHoursJson(week, mapper);
 
         model.addAttribute("tripsJson",          tripsJson);
         model.addAttribute("businessHoursJson",  businessHoursJson);
         model.addAttribute("weekStart",  week);
         model.addAttribute("weekEnd",    week.plusDays(6));
-        model.addAttribute("prevWeek",   week.minusWeeks(1));
-        model.addAttribute("nextWeek",   week.plusWeeks(1));
-        model.addAttribute("minWeek",    minWeek);
-        model.addAttribute("maxWeek",    maxWeek);
+        model.addAttribute("prevWeek",   week.minusDays(7));
+        model.addAttribute("nextWeek",   week.plusDays(7));
+        model.addAttribute("minWeek",    today);
+        model.addAttribute("maxWeek",    maxStart);
         return "user/bookings";
     }
 
