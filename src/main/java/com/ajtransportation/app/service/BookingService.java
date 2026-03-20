@@ -4,6 +4,7 @@ import com.ajtransportation.app.model.Booking;
 import com.ajtransportation.app.model.Trip;
 import com.ajtransportation.app.model.User;
 import com.ajtransportation.app.repository.BookingRepository;
+import com.ajtransportation.app.repository.TripRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
@@ -16,28 +17,37 @@ import java.util.UUID;
 public class BookingService {
 
     private final BookingRepository bookingRepository;
-    private final TripService tripService;
+    private final TripRepository    tripRepository;
+    private final TripService       tripService;
 
     private static final List<String> INACTIVE_STATUSES = List.of("CANCELLED", "REJECTED");
+    private static final int          EXPIRY_SECONDS    = 120;
 
-    // Increased from 60s to 120s to allow for Supabase latency under load
-    private static final int EXPIRY_SECONDS = 120;
-
-    public BookingService(BookingRepository bookingRepository, TripService tripService) {
+    public BookingService(BookingRepository bookingRepository,
+                          TripRepository tripRepository,
+                          TripService tripService) {
         this.bookingRepository = bookingRepository;
-        this.tripService = tripService;
+        this.tripRepository    = tripRepository;
+        this.tripService       = tripService;
     }
 
     @Transactional
-    public Booking createBooking(User user, UUID tripId, String pickupAddress, String dropoffAddress) {
-        if (!tripService.isTripAvailable(tripId)) {
+    public Booking createBooking(User user, UUID tripId,
+                                  String pickupAddress, String dropoffAddress) {
+        // Load and check trip within same transaction
+        Trip trip = tripRepository.findById(tripId)
+            .orElseThrow(() -> new RuntimeException("That slot no longer exists."));
+
+        if (!"AVAILABLE".equals(trip.getStatus())) {
             throw new RuntimeException("Sorry, that slot is no longer available.");
         }
         if (bookingRepository.existsByTripIdAndStatusNotInOrderByCreatedAtAsc(tripId, INACTIVE_STATUSES)) {
             throw new RuntimeException("This slot has just been taken. Please choose another.");
         }
 
-        Trip trip = tripService.getTripById(tripId);
+        // Mark trip PENDING within same transaction — no separate @Transactional call
+        trip.setStatus("PENDING");
+        tripRepository.save(trip);
 
         Booking booking = new Booking();
         booking.setUser(user);
@@ -47,8 +57,6 @@ public class BookingService {
         booking.setStatus("PENDING_APPROVAL");
         booking.setPaymentStatus("UNPAID");
         booking.setCreatedAt(LocalDateTime.now());
-
-        tripService.updateTripStatus(tripId, "PENDING");
 
         return bookingRepository.save(booking);
     }
@@ -70,43 +78,66 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
+    /**
+     * Accept — update booking AND trip status in one transaction.
+     * No delegation to TripService to avoid nested transaction conflicts on Supabase.
+     */
     @Transactional
     public void acceptBooking(UUID bookingId) {
-        Booking booking = getBookingById(bookingId);
+        Booking booking = bookingRepository.findById(bookingId)
+            .orElseThrow(() -> new RuntimeException("Booking not found: " + bookingId));
+
+        Trip trip = booking.getTrip();
+
+        // Update both in the same transaction
         booking.setStatus("CONFIRMED");
         booking.setPaymentStatus("AWAITING_PAYMENT");
         bookingRepository.save(booking);
-        tripService.updateTripStatus(booking.getTrip().getId(), "BOOKED");
+
+        trip.setStatus("BOOKED");
+        tripRepository.save(trip);
     }
 
+    /**
+     * Reject — delete on-the-fly trips and their booking.
+     * For admin-created trips: mark REJECTED, restore trip to AVAILABLE.
+     */
     @Transactional
     public void rejectBooking(UUID bookingId) {
-        Booking booking = getBookingById(bookingId);
+        Booking booking = bookingRepository.findById(bookingId)
+            .orElseThrow(() -> new RuntimeException("Booking not found: " + bookingId));
+
         Trip trip = booking.getTrip();
 
         if ("User Request".equals(trip.getLabel())) {
-            // Delete booking first (removes FK reference), then delete trip
+            // Delete booking first (FK reference), then trip
             bookingRepository.delete(booking);
-            tripService.deleteTrip(trip.getId());
+            bookingRepository.flush();
+            tripRepository.deleteById(trip.getId());
         } else {
             booking.setStatus("REJECTED");
             bookingRepository.save(booking);
-            tripService.updateTripStatus(trip.getId(), "AVAILABLE");
+            trip.setStatus("AVAILABLE");
+            tripRepository.save(trip);
         }
     }
 
     @Transactional
     public void cancelBooking(UUID bookingId) {
-        Booking booking = getBookingById(bookingId);
+        Booking booking = bookingRepository.findById(bookingId)
+            .orElseThrow(() -> new RuntimeException("Booking not found: " + bookingId));
+
         Trip trip = booking.getTrip();
 
         if ("User Request".equals(trip.getLabel())) {
             bookingRepository.delete(booking);
-            tripService.deleteTrip(trip.getId());
+            bookingRepository.flush();
+            tripRepository.deleteById(trip.getId());
         } else {
             booking.setStatus("CANCELLED");
             bookingRepository.save(booking);
-            tripService.updateTripStatus(trip.getId(), "AVAILABLE");
+            trip.setStatus("AVAILABLE");
+            tripRepository.save(trip);
         }
     }
 
@@ -116,13 +147,15 @@ public class BookingService {
             .ifPresent(booking -> {
                 booking.setStatus("CANCELLED");
                 bookingRepository.save(booking);
-                tripService.updateTripStatus(tripId, "AVAILABLE");
+                tripRepository.findById(tripId).ifPresent(trip -> {
+                    trip.setStatus("AVAILABLE");
+                    tripRepository.save(trip);
+                });
             });
     }
 
     @Transactional
     public String getBookingStatusForPolling(UUID bookingId) {
-        // Booking deleted (rejected on-the-fly trip) — tell user it was rejected
         Booking booking = bookingRepository.findById(bookingId).orElse(null);
         if (booking == null) return "REJECTED";
 
@@ -134,11 +167,13 @@ public class BookingService {
                 Trip trip = booking.getTrip();
                 if ("User Request".equals(trip.getLabel())) {
                     bookingRepository.delete(booking);
-                    tripService.deleteTrip(trip.getId());
+                    bookingRepository.flush();
+                    tripRepository.deleteById(trip.getId());
                 } else {
                     booking.setStatus("CANCELLED");
                     bookingRepository.save(booking);
-                    tripService.updateTripStatus(trip.getId(), "AVAILABLE");
+                    trip.setStatus("AVAILABLE");
+                    tripRepository.save(trip);
                 }
                 return "EXPIRED";
             }
@@ -163,13 +198,15 @@ public class BookingService {
     public long countActiveBookings(User user) {
         return bookingRepository.findByUser(user)
                 .stream()
-                .filter(b -> "PENDING_APPROVAL".equals(b.getStatus()) || "CONFIRMED".equals(b.getStatus()))
+                .filter(b -> "PENDING_APPROVAL".equals(b.getStatus())
+                          || "CONFIRMED".equals(b.getStatus()))
                 .count();
     }
 
     @Transactional
     public void confirmBooking(UUID bookingId) {
-        Booking booking = getBookingById(bookingId);
+        Booking booking = bookingRepository.findById(bookingId)
+            .orElseThrow(() -> new RuntimeException("Booking not found: " + bookingId));
         booking.setStatus("CONFIRMED");
         booking.setPaymentStatus("PAID");
         bookingRepository.save(booking);

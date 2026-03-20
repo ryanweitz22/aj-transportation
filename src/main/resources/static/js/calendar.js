@@ -7,8 +7,6 @@
  * Grey       = past / blocked / closed
  *
  * Calendar spans 04:00 → 23:00 (19 hours).
- * Row height is fixed at a comfortable tap-friendly size.
- * The PAGE scrolls naturally — no clipped inner scroll containers.
  */
 
 let currentWeekStart = null;
@@ -28,7 +26,6 @@ document.addEventListener('DOMContentLoaded', function () {
     renderCalendar(trips, businessHours, currentWeekStart);
     updateNavButtons();
 
-    // Populate month jump selector
     const monthSel = document.getElementById('monthSelect');
     if (monthSel) {
         const MONTHS = ['January','February','March','April','May','June',
@@ -45,9 +42,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// ── Row height — comfortable, tap-friendly, fixed ──────────────────────────────
-// Desktop: 56px/hr  →  tablet: 48px/hr  →  phone: 40px/hr
-// The page body scrolls; the calendar grid itself is never clipped.
 function getPxHour() {
     const w = window.innerWidth;
     if (w >= 1024) return 56;
@@ -70,16 +64,14 @@ function renderCalendar(trips, businessHours, weekStart) {
         days.push(d);
     }
 
-    const CAL_START   = 4 * 60;   // 04:00 in minutes
-    const CAL_END     = 23 * 60;  // 23:00 in minutes
-    const TOTAL_HOURS = 19;       // 04:00 → 23:00
+    const CAL_START   = 4 * 60;
+    const CAL_END     = 23 * 60;
+    const TOTAL_HOURS = 19;
     const PX_HOUR     = getPxHour();
     const TOTAL_H     = PX_HOUR * TOTAL_HOURS;
-    // Each open-slot pill covers 30 min
     const SLOT_MIN    = 30;
     const SLOT_H      = Math.max((SLOT_MIN / 60) * PX_HOUR - 3, 24);
 
-    // Write responsive overrides into a <style> tag
     let styleTag = document.getElementById('cal-dynamic-style');
     if (!styleTag) {
         styleTag = document.createElement('style');
@@ -87,23 +79,14 @@ function renderCalendar(trips, businessHours, weekStart) {
         document.head.appendChild(styleTag);
     }
     styleTag.textContent = `
-        /* Let the page scroll — never clip the calendar grid */
         #calendar-container            { min-height: unset !important; overflow: visible !important; }
         .calendar-grid                 { overflow: visible !important; }
         .calendar-body                 { overflow: visible !important; }
         .cal-day-column                { overflow: visible !important; }
-
-        /* Time labels track PX_HOUR */
         .time-label { height: ${PX_HOUR}px !important; font-size: 0.72rem !important; }
-
-        /* Sticky day header sits just below the navbar */
         .calendar-header-row { position: sticky; top: var(--nav-h, 64px); z-index: 10;
                                background: var(--bg); border-bottom: 2px solid var(--border); }
-
-        /* Slot sizing */
         .trip-slot { font-size: 0.78rem; padding: 5px 7px; }
-
-        /* Mobile tweaks */
         @media (max-width: 640px) {
             .cal-day-header            { padding: 8px 3px; }
             .cal-day-header .day-name  { font-size: 0.6rem; }
@@ -118,7 +101,6 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     let html = '<div class="calendar-grid">';
 
-    // ── Sticky header row ──────────────────────────────────────────────────────
     html += '<div class="calendar-header-row"><div class="time-gutter"></div>';
     days.forEach((day, i) => {
         const isToday = day.getTime() === today.getTime();
@@ -130,17 +112,14 @@ function renderCalendar(trips, businessHours, weekStart) {
     });
     html += '</div>';
 
-    // ── Body — full height, page scrolls ───────────────────────────────────────
     html += `<div class="calendar-body" style="height:${TOTAL_H}px; position:relative;">`;
 
-    // Time gutter 04:00 → 23:00
     html += '<div class="time-column">';
     for (let h = 4; h <= 23; h++) {
         html += `<div class="time-label" style="height:${PX_HOUR}px;">${String(h).padStart(2,'0')}:00</div>`;
     }
     html += '</div>';
 
-    // ── Seven day columns ──────────────────────────────────────────────────────
     days.forEach(day => {
         const dateStr  = formatDate(day);
         const isPast   = day < today;
@@ -155,19 +134,22 @@ function renderCalendar(trips, businessHours, weekStart) {
 
         html += `<div class="cal-day-column ${isPast ? 'past-col' : ''}" style="height:${TOTAL_H}px;">`;
 
-        // Hour divider lines
         for (let h = 0; h <= TOTAL_HOURS; h++) {
             html += `<div class="hour-line" style="top:${h * PX_HOUR}px;"></div>`;
         }
 
-        // ── Open business hours ghost slots (teal dashed) ──────────────────────
+        // ── Open business hours ghost slots ────────────────────────────────────
         if (!isPast && isOpen) {
             let t = bhOpen;
             while (t < bhClose) {
                 if (t >= CAL_START && t < CAL_END) {
                     const covered = dayTrips.some(trip => {
                         const s = timeToMin(trip.startTime);
-                        const e = trip.endTime ? timeToMin(trip.endTime) : s + 60;
+                        // FIX: if no endTime, cover through end of business hours
+                        // so BOOKED/PENDING trips without endTime don't leave ghost slots
+                        const e = trip.endTime
+                            ? timeToMin(trip.endTime)
+                            : (trip.status === 'AVAILABLE' ? s + 60 : bhClose);
                         return t >= s && t < e;
                     });
                     if (!covered) {
@@ -236,6 +218,7 @@ function renderCalendar(trips, businessHours, weekStart) {
                     <span class="slot-status-tag">Booked</span>
                 </div>`;
             } else {
+                // BLOCKED
                 html += `<div class="trip-slot slot-blocked"
                     style="top:${topPx}px; height:${hPx}px;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
@@ -244,13 +227,12 @@ function renderCalendar(trips, businessHours, weekStart) {
             }
         });
 
-        html += '</div>'; // end cal-day-column
+        html += '</div>';
     });
 
-    html += '</div></div>'; // end calendar-body + calendar-grid
+    html += '</div></div>';
     container.innerHTML = html;
 
-    // Keyboard accessibility
     container.querySelectorAll('.trip-slot[role="button"]').forEach(el => {
         el.addEventListener('keydown', e => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
@@ -258,7 +240,6 @@ function renderCalendar(trips, businessHours, weekStart) {
     });
 }
 
-// Re-render on resize so PX_HOUR adapts (desktop/tablet/phone breakpoints)
 let _resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(_resizeTimer);
@@ -270,8 +251,6 @@ window.addEventListener('resize', () => {
         if (currentWeekStart) renderCalendar(trips, businessHours, currentWeekStart);
     }, 150);
 });
-
-// ─── Click handlers ────────────────────────────────────────────────────────────
 
 function handleSlotClick(el) {
     try {
@@ -290,8 +269,6 @@ function handleOpenSlotClick(el) {
         openBookingModal(null, null, s.time, null, s.date, null);
     } catch (e) { console.error(e); }
 }
-
-// ─── Booking modal ─────────────────────────────────────────────────────────────
 
 function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const modal   = document.getElementById('booking-modal');
@@ -316,15 +293,11 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     document.body.style.overflow = 'hidden';
 }
 
-// ─── Close ─────────────────────────────────────────────────────────────────────
-
 function closeAllModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
     document.body.style.overflow = '';
     resetBookingModal();
 }
-
-// ─── Week navigation ───────────────────────────────────────────────────────────
 
 function updateNavButtons() {
     const prev = document.getElementById('prevWeekBtn');
@@ -359,8 +332,6 @@ function navigateToWeek(monday) {
 function jumpToMonth(weekStr) {
     if (weekStr) window.location.href = '/bookings?week=' + weekStr;
 }
-
-// ─── Utilities ─────────────────────────────────────────────────────────────────
 
 function timeToMin(t)      { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); }
 function minToTime(m)      { return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
