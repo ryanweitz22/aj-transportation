@@ -1,6 +1,5 @@
 package com.ajtransportation.app.controller;
 
-import com.ajtransportation.app.model.Booking;
 import com.ajtransportation.app.model.Trip;
 import com.ajtransportation.app.service.BookingService;
 import com.ajtransportation.app.service.TripService;
@@ -17,7 +16,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,7 +32,6 @@ public class AdminDashboardController {
         this.bookingService = bookingService;
     }
 
-    // ── Shared mapper ─────────────────────────────────────────────────────────
     private ObjectMapper buildMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
@@ -92,14 +89,15 @@ public class AdminDashboardController {
     public String cancelBooking(@PathVariable UUID bookingId,
                                 RedirectAttributes ra) {
         bookingService.cancelBooking(bookingId);
-        ra.addFlashAttribute("successMessage", "Booking cancelled successfully.");
+        ra.addFlashAttribute("successMessage", "Booking cancelled.");
         return "redirect:/admin/dashboard";
     }
 
-    // POST /admin/dashboard/block/{tripId} — block a single existing trip
+    // POST /admin/dashboard/block/{tripId}
     @PostMapping("/block/{tripId}")
     public String blockSlot(@PathVariable UUID tripId,
-                            @RequestParam(value = "reason", defaultValue = "Blocked by admin") String reason,
+                            @RequestParam(value = "reason",
+                                          defaultValue = "Blocked by admin") String reason,
                             RedirectAttributes ra) {
         tripService.blockTrip(tripId, reason);
         ra.addFlashAttribute("successMessage", "Slot blocked.");
@@ -120,77 +118,9 @@ public class AdminDashboardController {
     public String cancelByTrip(@PathVariable UUID tripId,
                                RedirectAttributes ra) {
         bookingService.cancelBookingByTripId(tripId);
-        ra.addFlashAttribute("successMessage", "Booking cancelled. Slot is now available again.");
-        return "redirect:/admin/dashboard";
-    }
-
-    /**
-     * POST /admin/dashboard/block-day
-     *
-     * Blocks ALL AVAILABLE trips on the chosen date in one click.
-     * PENDING and BOOKED trips are left untouched.
-     */
-    @PostMapping("/block-day")
-    public String blockDay(
-            @RequestParam("date")
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(value = "reason", defaultValue = "Day blocked by admin") String reason,
-            RedirectAttributes ra) {
-
-        List<Trip> trips = tripService.getTripsForDay(date);
-        long count = 0;
-        for (Trip trip : trips) {
-            if ("AVAILABLE".equals(trip.getStatus())) {
-                tripService.blockTrip(trip.getId(), reason);
-                count++;
-            }
-        }
-
-        ra.addFlashAttribute("successMessage", count > 0
-            ? count + " slot(s) blocked on " + date + "."
-            : "No available slots found on " + date + " to block.");
-
-        return "redirect:/admin/dashboard?view=day&date=" + date;
-    }
-
-    /**
-     * POST /admin/dashboard/block-time-range
-     *
-     * Creates a new BLOCKED trip record for a specific date and time range
-     * chosen by the admin — even if no trip exists for that slot yet.
-     * This is how the admin blocks a custom time window that users haven't
-     * booked yet (e.g. block 10:00–14:00 on a specific day).
-     */
-    @PostMapping("/block-time-range")
-    public String blockTimeRange(
-            @RequestParam("date")
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam("startTime") String startTime,
-            @RequestParam("endTime")   String endTime,
-            @RequestParam(value = "reason", defaultValue = "Blocked by admin") String reason,
-            RedirectAttributes ra) {
-
-        LocalTime start = LocalTime.parse(startTime);
-        LocalTime end   = LocalTime.parse(endTime);
-
-        if (!end.isAfter(start)) {
-            ra.addFlashAttribute("errorMessage", "End time must be after start time.");
-            return "redirect:/admin/dashboard?view=day&date=" + date;
-        }
-
-        Trip blocked = new Trip();
-        blocked.setDate(date);
-        blocked.setStartTime(start);
-        blocked.setEndTime(end);
-        blocked.setLabel("Blocked by admin");
-        blocked.setStatus("BLOCKED");
-        blocked.setBlockedReason(reason);
-        tripService.createTrip(blocked);
-
         ra.addFlashAttribute("successMessage",
-            "Time blocked: " + startTime + " – " + endTime + " on " + date + ".");
-
-        return "redirect:/admin/dashboard?view=day&date=" + date;
+            "Booking cancelled. Slot is now available again.");
+        return "redirect:/admin/dashboard";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

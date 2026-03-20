@@ -21,7 +21,6 @@ public class SecurityConfig {
                     "/login", "/register", "/verify-email",
                     "/css/**", "/js/**", "/images/**",
                     "/bookings",
-                    "/bookings/waiting/**",
                     "/bookings/status/**",
                     "/bookings/pending-count"
                 ).permitAll()
