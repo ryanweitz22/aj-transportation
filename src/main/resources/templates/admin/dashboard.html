@@ -9,59 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/style.css}">
-    <style>
-        .block-panel {
-            background: white;
-            border: 1.5px solid #fde68a;
-            border-radius: 14px;
-            padding: 20px 24px;
-            margin-top: 20px;
-        }
-        .block-panel h3 {
-            font-size: 1rem;
-            margin-bottom: 4px;
-            color: #92400e;
-        }
-        .block-panel p {
-            font-size: 0.825rem;
-            color: var(--text-muted);
-            margin-bottom: 16px;
-        }
-        .block-form-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-        .block-form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .block-form-group label {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .block-form-group input {
-            padding: 8px 12px;
-            border: 1.5px solid var(--border);
-            border-radius: var(--radius-sm);
-            font-family: var(--font-body);
-            font-size: 0.875rem;
-            outline: none;
-            background: var(--bg);
-        }
-        .block-form-group input:focus {
-            border-color: #f0a500;
-        }
-    </style>
 </head>
 <body>
 
-<!-- NAVBAR — all links go directly to /admin/* — never to /dashboard -->
 <nav class="navbar">
     <div class="nav-container">
         <a href="/admin/dashboard" class="nav-logo">
@@ -101,7 +51,12 @@
         <h1 class="admin-title">Bookings</h1>
         <p style="color:var(--text-muted);font-size:0.9rem;" th:text="${viewLabel}"></p>
       </div>
-      <a th:href="@{/admin/trips/new}" class="btn btn-primary">+ Create Slot</a>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <a th:href="@{/bookings}" target="_blank" class="btn btn-secondary">
+            🔗 View User Calendar
+        </a>
+        <a th:href="@{/admin/trips/new}" class="btn btn-primary">+ Create Slot</a>
+      </div>
     </div>
 
     <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
@@ -121,7 +76,7 @@
            class="view-btn">Month</a>
       </div>
 
-      <div style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <a th:href="@{/admin/dashboard(view=${currentView},date=${prevDate})}"
            class="btn btn-secondary btn-sm">← Prev</a>
 
@@ -134,13 +89,13 @@
         <a th:href="@{/admin/dashboard(view=${currentView},date=${nextDate})}"
            class="btn btn-secondary btn-sm">Next →</a>
 
-        <a th:href="@{/admin/dashboard(view=${currentView},date=${#temporals.createNow().toLocalDate()})}"
+        <a th:href="@{/admin/dashboard(view=${currentView},date=${today})}"
            class="btn btn-secondary btn-sm">Today</a>
       </div>
     </div>
 
     <!-- Trips table -->
-    <div class="admin-card" style="margin-top:20px;">
+    <div class="admin-card" style="margin-top:20px;overflow-x:auto;">
 
       <div th:if="${#lists.isEmpty(trips)}" class="empty-state">
         <p>No trips found for this period.</p>
@@ -157,7 +112,8 @@
             <th>Route</th>
             <th>Fee</th>
             <th>Status</th>
-            <th>Booked by</th>
+            <th>Booked By</th>
+            <th>Phone</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -175,8 +131,19 @@
               </span>
             </td>
 
-            <td th:text="${trip.label != null ? trip.label : '—'}"></td>
-            <td th:text="${trip.fee  != null ? 'R' + trip.fee  : '—'}"></td>
+            <!-- Route — show pickup→dropoff if available, else label -->
+            <td>
+              <span th:if="${trip.pickupAddress != null and trip.dropoffAddress != null}"
+                    style="font-size:0.82rem;">
+                <span th:text="${trip.pickupAddress}"></span>
+                →
+                <span th:text="${trip.dropoffAddress}"></span>
+              </span>
+              <span th:unless="${trip.pickupAddress != null and trip.dropoffAddress != null}"
+                    th:text="${trip.label != null ? trip.label : '—'}"></span>
+            </td>
+
+            <td th:text="${trip.fee != null ? 'R' + trip.fee : '—'}"></td>
 
             <td>
               <span class="status-badge"
@@ -188,15 +155,30 @@
               </span>
             </td>
 
+            <!-- Booked By — name from booking record -->
             <td>
-              <span th:if="${trip.status == 'BOOKED'}"
-                    style="font-size:0.8rem;color:var(--text-muted);">(via booking record)</span>
-              <span th:unless="${trip.status == 'BOOKED'}"
+              <span th:if="${bookingByTripId[trip.id] != null}"
+                    style="font-size:0.85rem;font-weight:600;"
+                    th:text="${bookingByTripId[trip.id].user.username}"></span>
+              <span th:if="${bookingByTripId[trip.id] != null}"
+                    style="display:block;font-size:0.75rem;color:var(--text-muted);"
+                    th:text="${bookingByTripId[trip.id].user.email}"></span>
+              <span th:unless="${bookingByTripId[trip.id] != null}"
+                    style="color:var(--text-light);">—</span>
+            </td>
+
+            <!-- Phone -->
+            <td>
+              <span th:if="${bookingByTripId[trip.id] != null and bookingByTripId[trip.id].user.phoneNumber != null}"
+                    style="font-size:0.85rem;"
+                    th:text="${bookingByTripId[trip.id].user.phoneNumber}"></span>
+              <span th:unless="${bookingByTripId[trip.id] != null and bookingByTripId[trip.id].user.phoneNumber != null}"
                     style="color:var(--text-light);">—</span>
             </td>
 
             <td class="action-cell">
 
+              <!-- Block — AVAILABLE only -->
               <form th:if="${trip.status == 'AVAILABLE'}"
                     th:action="@{/admin/dashboard/block/{id}(id=${trip.id})}"
                     method="post" style="display:inline;">
@@ -206,6 +188,7 @@
                         onclick="return confirm('Block this slot?')">Block</button>
               </form>
 
+              <!-- Unblock — BLOCKED only -->
               <form th:if="${trip.status == 'BLOCKED'}"
                     th:action="@{/admin/dashboard/unblock/{id}(id=${trip.id})}"
                     method="post" style="display:inline;">
@@ -213,6 +196,7 @@
                 <button type="submit" class="btn btn-sm btn-success">Unblock</button>
               </form>
 
+              <!-- Cancel booking — BOOKED only -->
               <form th:if="${trip.status == 'BOOKED'}"
                     th:action="@{/admin/dashboard/cancel-by-trip/{id}(id=${trip.id})}"
                     method="post" style="display:inline;">
@@ -223,6 +207,7 @@
                 </button>
               </form>
 
+              <!-- Delete — not BOOKED -->
               <form th:if="${trip.status != 'BOOKED'}"
                     th:action="@{/admin/trips/delete/{id}(id=${trip.id})}"
                     method="post" style="display:inline;">
@@ -237,21 +222,18 @@
       </table>
     </div>
 
-    <!-- Stats -->
+    <!-- Accurate stats for selected period -->
     <div class="stats-grid" style="margin-top:24px;">
       <div class="stat-card">
-        <span class="stat-number"
-              th:text="${#lists.size(trips.?[status == 'AVAILABLE'])}">0</span>
+        <span class="stat-number" th:text="${availableCount}">0</span>
         <span class="stat-label">Available Slots</span>
       </div>
       <div class="stat-card">
-        <span class="stat-number"
-              th:text="${#lists.size(trips.?[status == 'BOOKED'])}">0</span>
+        <span class="stat-number" th:text="${bookedCount}">0</span>
         <span class="stat-label">Booked Slots</span>
       </div>
       <div class="stat-card">
-        <span class="stat-number"
-              th:text="${#lists.size(trips.?[status == 'BLOCKED'])}">0</span>
+        <span class="stat-number" th:text="${blockedCount}">0</span>
         <span class="stat-label">Blocked Slots</span>
       </div>
     </div>
