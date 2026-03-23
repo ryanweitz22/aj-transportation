@@ -20,8 +20,14 @@ public class Payment {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "ozow_reference")
-    private String ozowReference;
+    @Column(name = "payfast_payment_id")
+    private String payfastPaymentId;
+
+    @Column(name = "payfast_token")
+    private String payfastToken;
+
+    @Column(name = "payment_type")
+    private String paymentType;
 
     @Column(nullable = false)
     private String status = "PENDING";
@@ -40,8 +46,14 @@ public class Payment {
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }
 
-    public String getOzowReference() { return ozowReference; }
-    public void setOzowReference(String ozowReference) { this.ozowReference = ozowReference; }
+    public String getPayfastPaymentId() { return payfastPaymentId; }
+    public void setPayfastPaymentId(String payfastPaymentId) { this.payfastPaymentId = payfastPaymentId; }
+
+    public String getPayfastToken() { return payfastToken; }
+    public void setPayfastToken(String payfastToken) { this.payfastToken = payfastToken; }
+
+    public String getPaymentType() { return paymentType; }
+    public void setPaymentType(String paymentType) { this.paymentType = paymentType; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
