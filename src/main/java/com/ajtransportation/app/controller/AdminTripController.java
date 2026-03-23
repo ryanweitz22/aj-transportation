@@ -40,39 +40,43 @@ public class AdminTripController {
         this.bookingRepository = bookingRepository;
     }
 
-    // GET /admin/trips — list upcoming trips only (no past dates/times)
     @GetMapping
     public String listTrips(Model model) {
         LocalDate today = LocalDate.now();
         LocalTime now   = LocalTime.now();
 
-        // Fetch this week and next 4 weeks so admin has enough visibility
+        // Fetch next 4 weeks
         List<Trip> allTrips = tripService.getTripsForRange(today, today.plusWeeks(4));
 
-        // Filter out trips that have already passed today
+        // Include BLOCKED trips alongside others — filter out only past times
         List<Trip> trips = allTrips.stream()
             .filter(t -> {
                 if (t.getDate().isAfter(today)) return true;
-                if (t.getDate().isEqual(today)) return t.getStartTime().isAfter(now);
-                return false;
+                if (t.getDate().isBefore(today)) return false;
+                // Today — always show BLOCKED and BOOKED even if past
+                if ("BLOCKED".equals(t.getStatus())
+                    || "BOOKED".equals(t.getStatus())) return true;
+                return t.getStartTime().isAfter(now);
             })
             .collect(Collectors.toList());
 
         // Build bookingByTripId map for BOOKED/PENDING trips
         Map<UUID, Booking> bookingByTripId = new HashMap<>();
         for (Trip trip : trips) {
-            if ("BOOKED".equals(trip.getStatus()) || "PENDING".equals(trip.getStatus())) {
+            if ("BOOKED".equals(trip.getStatus())
+                || "PENDING".equals(trip.getStatus())) {
                 bookingRepository
                     .findByTripIdAndStatusNot(trip.getId(), "CANCELLED")
                     .ifPresent(b -> bookingByTripId.put(trip.getId(), b));
             }
         }
 
-        // Build a map of tripId → canCancel (true if trip is 1+ hour away)
+        // 1-hour cancel rule for BOOKED trips
         Map<UUID, Boolean> canCancelMap = new HashMap<>();
         for (Trip trip : trips) {
             if ("BOOKED".equals(trip.getStatus())) {
-                LocalDateTime tripDateTime = LocalDateTime.of(trip.getDate(), trip.getStartTime());
+                LocalDateTime tripDateTime = LocalDateTime.of(
+                    trip.getDate(), trip.getStartTime());
                 long minutesUntilTrip = java.time.Duration.between(
                     LocalDateTime.now(), tripDateTime).toMinutes();
                 canCancelMap.put(trip.getId(), minutesUntilTrip >= 60);
@@ -86,7 +90,6 @@ public class AdminTripController {
         return "admin/trips-list";
     }
 
-    // GET /admin/trips/new
     @GetMapping("/new")
     public String newTripForm(Model model) {
         model.addAttribute("trip", new Trip());
@@ -96,7 +99,6 @@ public class AdminTripController {
         return "admin/trips-new";
     }
 
-    // POST /admin/trips/new
     @PostMapping("/new")
     public String createTrip(
             @RequestParam("date")      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -127,7 +129,6 @@ public class AdminTripController {
         return "redirect:/admin/trips/new";
     }
 
-    // GET /admin/trips/pricing
     @GetMapping("/pricing")
     public String pricingForm(Model model) {
         PricingConfig config = tripService.getPricingConfig();
@@ -135,11 +136,10 @@ public class AdminTripController {
         return "admin/pricing";
     }
 
-    // POST /admin/trips/pricing
     @PostMapping("/pricing")
     public String savePricing(
-            @RequestParam("ratePerKm")    BigDecimal ratePerKm,
-            @RequestParam("minimumFare")  BigDecimal minimumFare,
+            @RequestParam("ratePerKm")   BigDecimal ratePerKm,
+            @RequestParam("minimumFare") BigDecimal minimumFare,
             RedirectAttributes redirectAttributes) {
         tripService.savePricingConfig(ratePerKm, minimumFare);
         redirectAttributes.addFlashAttribute("successMessage",
@@ -148,26 +148,23 @@ public class AdminTripController {
         return "redirect:/admin/trips/pricing";
     }
 
-    // POST /admin/trips/block/{id}
     @PostMapping("/block/{id}")
     public String blockTrip(@PathVariable UUID id,
                             @RequestParam(value = "reason", required = false) String reason,
                             RedirectAttributes redirectAttributes) {
         tripService.blockTrip(id, reason);
-        redirectAttributes.addFlashAttribute("successMessage", "Slot blocked successfully.");
+        redirectAttributes.addFlashAttribute("successMessage", "Slot blocked.");
         return "redirect:/admin/trips";
     }
 
-    // POST /admin/trips/unblock/{id}
     @PostMapping("/unblock/{id}")
     public String unblockTrip(@PathVariable UUID id,
                               RedirectAttributes redirectAttributes) {
         tripService.unblockTrip(id);
-        redirectAttributes.addFlashAttribute("successMessage", "Slot unblocked successfully.");
+        redirectAttributes.addFlashAttribute("successMessage", "Slot unblocked.");
         return "redirect:/admin/trips";
     }
 
-    // POST /admin/trips/delete/{id}
     @PostMapping("/delete/{id}")
     public String deleteTrip(@PathVariable UUID id,
                              RedirectAttributes redirectAttributes) {
@@ -176,16 +173,13 @@ public class AdminTripController {
         return "redirect:/admin/trips";
     }
 
-    /**
-     * POST /admin/trips/cancel/{id}
-     * Cancels a booking only if the trip is 1 or more hours away.
-     * If less than 1 hour away the action is blocked server-side too.
-     */
+    // Cancel booking — 1-hour rule enforced server-side
     @PostMapping("/cancel/{id}")
     public String cancelBooking(@PathVariable UUID id,
                                 RedirectAttributes ra) {
         Trip trip = tripService.getTripById(id);
-        LocalDateTime tripDateTime = LocalDateTime.of(trip.getDate(), trip.getStartTime());
+        LocalDateTime tripDateTime = LocalDateTime.of(
+            trip.getDate(), trip.getStartTime());
         long minutesUntilTrip = java.time.Duration.between(
             LocalDateTime.now(), tripDateTime).toMinutes();
 
@@ -196,7 +190,18 @@ public class AdminTripController {
         }
 
         bookingService.cancelBookingByTripId(id);
-        ra.addFlashAttribute("successMessage", "Booking cancelled. Slot is now available.");
+        ra.addFlashAttribute("successMessage",
+            "Booking cancelled. Slot is now available.");
+        return "redirect:/admin/trips";
+    }
+
+    // Cancel a BLOCKED slot — frees it back to AVAILABLE
+    @PostMapping("/cancel-block/{id}")
+    public String cancelBlock(@PathVariable UUID id,
+                              RedirectAttributes ra) {
+        tripService.unblockTrip(id);
+        ra.addFlashAttribute("successMessage",
+            "Blocked slot cancelled and is now available.");
         return "redirect:/admin/trips";
     }
 }

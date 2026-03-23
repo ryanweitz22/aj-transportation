@@ -45,8 +45,7 @@
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }
-        .block-form-group input,
-        .block-form-group select {
+        .block-form-group input {
             padding: 9px 12px;
             border: 1.5px solid var(--border);
             border-radius: var(--radius-sm);
@@ -56,9 +55,9 @@
             background: white;
             color: var(--text-dark);
         }
-        .block-form-group input:focus,
-        .block-form-group select:focus {
-            border-color: var(--primary);
+        .block-form-group input:focus { border-color: var(--primary); }
+        .block-form-group input.required-field:invalid {
+            border-color: #fca5a5;
         }
         .day-divider {
             background: #fff8e6;
@@ -72,17 +71,8 @@
             flex-wrap: wrap;
             gap: 16px;
         }
-        .day-divider-text h3 {
-            font-size: 1rem;
-            color: #92400e;
-            margin-bottom: 4px;
-        }
-        .day-divider-text p {
-            font-size: 0.825rem;
-            color: #92400e;
-            opacity: 0.8;
-            margin: 0;
-        }
+        .day-divider-text h3 { font-size: 1rem; color: #92400e; margin-bottom: 4px; }
+        .day-divider-text p  { font-size: 0.825rem; color: #92400e; opacity: 0.8; margin: 0; }
         .existing-trip-row {
             display: flex;
             align-items: center;
@@ -94,20 +84,12 @@
             flex-wrap: wrap;
         }
         .existing-trip-row:last-child { border-bottom: none; }
-        .trip-time-badge {
-            font-weight: 600;
-            color: var(--text-dark);
-            min-width: 120px;
-        }
-        .trip-label-muted {
-            color: var(--text-muted);
-            flex: 1;
-        }
+        .trip-time-badge { font-weight: 600; color: var(--text-dark); min-width: 120px; }
+        .trip-label-muted { color: var(--text-muted); flex: 1; }
     </style>
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav class="navbar">
     <div class="nav-container">
         <a href="/admin/dashboard" class="nav-logo">
@@ -146,7 +128,8 @@
         <div>
             <h1 class="admin-title">Block Time</h1>
             <p style="color:var(--text-muted);font-size:0.9rem;">
-                Block specific time windows or entire days so users cannot book during those periods.
+                Block specific time windows or entire days. Blocked slots appear on
+                the Bookings and Manage Slots pages with your reason.
             </p>
         </div>
     </div>
@@ -154,10 +137,10 @@
     <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
     <div th:if="${errorMessage}"   class="alert alert-error"   th:text="${errorMessage}"></div>
 
-    <!-- ── Date picker ── -->
+    <!-- Date picker -->
     <div class="block-card">
         <h3>📅 Select a Date</h3>
-        <p>Choose the date you want to manage. The page will reload showing existing slots for that day.</p>
+        <p>Choose the date you want to manage.</p>
         <div class="block-form-row">
             <div class="block-form-group">
                 <label>Date</label>
@@ -173,46 +156,59 @@
         </div>
     </div>
 
-    <!-- ── Block whole day ── -->
+    <!-- Block whole day -->
     <div class="day-divider">
         <div class="day-divider-text">
             <h3>🚫 Block Whole Day</h3>
-            <p>Instantly blocks all available slots on
+            <p>Blocks all available slots on
                <span th:text="${#temporals.format(selectedDate,'EEE dd MMM yyyy')}"></span>.
-               Booked and already-blocked slots are not affected.
             </p>
         </div>
-        <form th:action="@{/admin/block/whole-day}" method="post">
+        <form th:action="@{/admin/block/whole-day}" method="post"
+              onsubmit="return validateWholeDayReason()">
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
-            <input type="hidden" name="date"   th:value="${selectedDate}"/>
-            <input type="hidden" name="reason" value="Day blocked by admin"/>
-            <button type="submit" class="btn btn-warning"
-                    onclick="return confirm('Block ALL available slots on this day?')">
-                🚫 Block Whole Day
-            </button>
+            <input type="hidden" name="date" th:value="${selectedDate}"/>
+            <div class="block-form-row" style="flex-wrap:wrap;gap:10px;">
+                <div class="block-form-group">
+                    <label>Reason *</label>
+                    <input type="text" id="wholeDayReason" name="reason"
+                           placeholder="e.g. Public holiday, Maintenance day"
+                           required
+                           style="min-width:240px;"/>
+                </div>
+                <div style="padding-bottom:2px;">
+                    <button type="submit" class="btn btn-warning"
+                            onclick="return confirm('Block ALL available slots on this day?')">
+                        🚫 Block Whole Day
+                    </button>
+                </div>
+            </div>
         </form>
     </div>
 
-    <!-- ── Block specific time range ── -->
+    <!-- Block specific time range -->
     <div class="block-card">
         <h3>🕐 Block a Specific Time Range</h3>
-        <p>Enter a start and end time to block a custom window. Users will not be able to book during this period.</p>
-        <form th:action="@{/admin/block/time-range}" method="post">
+        <p>Enter a start time, end time and a reason. The reason will appear
+           in the Bookings and Manage Slots pages under Booked By.</p>
+        <form th:action="@{/admin/block/time-range}" method="post"
+              onsubmit="return validateTimeRangeReason()">
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
             <input type="hidden" name="date" th:value="${selectedDate}"/>
             <div class="block-form-row">
                 <div class="block-form-group">
-                    <label>Start Time</label>
+                    <label>Start Time *</label>
                     <input type="time" name="startTime" min="04:00" max="23:00" required/>
                 </div>
                 <div class="block-form-group">
-                    <label>End Time</label>
-                    <input type="time" name="endTime"   min="04:01" max="23:59" required/>
+                    <label>End Time *</label>
+                    <input type="time" name="endTime" min="04:01" max="23:59" required/>
                 </div>
-                <div class="block-form-group" style="min-width:200px;">
-                    <label>Reason (optional)</label>
-                    <input type="text" name="reason"
-                           placeholder="e.g. Lunch break, Maintenance"/>
+                <div class="block-form-group" style="min-width:220px;">
+                    <label>Reason *</label>
+                    <input type="text" id="timeRangeReason" name="reason"
+                           placeholder="e.g. Lunch break, Vehicle service"
+                           required/>
                 </div>
                 <div style="padding-bottom:2px;">
                     <button type="submit" class="btn btn-primary"
@@ -224,12 +220,12 @@
         </form>
     </div>
 
-    <!-- ── Existing trips on selected date ── -->
+    <!-- Existing trips on selected date -->
     <div class="block-card">
         <h3>📋 Existing Slots on
             <span th:text="${#temporals.format(selectedDate,'EEE dd MMM yyyy')}"></span>
         </h3>
-        <p>All trips currently in the system for this date. You can unblock any blocked slot here.</p>
+        <p>All trips for this date. Unblock any blocked slot here.</p>
 
         <div th:if="${#lists.isEmpty(existingTrips)}"
              style="color:var(--text-muted);font-size:0.875rem;padding:8px 0;">
@@ -247,7 +243,8 @@
                 </span>
 
                 <span class="trip-label-muted"
-                      th:text="${trip.label != null ? trip.label : '—'}"></span>
+                      th:text="${trip.blockedReason != null ? trip.blockedReason : (trip.label != null ? trip.label : '—')}">
+                </span>
 
                 <span class="status-badge"
                       th:classappend="${trip.status == 'AVAILABLE'} ? 'badge-available' :
@@ -257,7 +254,7 @@
                       th:text="${trip.status}">
                 </span>
 
-                <!-- Unblock button — BLOCKED only -->
+                <!-- Unblock -->
                 <form th:if="${trip.status == 'BLOCKED'}"
                       th:action="@{/admin/block/unblock/{id}(id=${trip.id})}"
                       method="post" style="display:inline;">
@@ -266,16 +263,33 @@
                     <button type="submit" class="btn btn-sm btn-success">Unblock</button>
                 </form>
 
-                <!-- No action for non-blocked slots -->
                 <span th:if="${trip.status != 'BLOCKED'}"
                       style="color:var(--text-light);font-size:0.8rem;min-width:72px;">—</span>
-
             </div>
         </div>
     </div>
 
 </div>
 </div>
+
+<script>
+function validateTimeRangeReason() {
+    const reason = document.getElementById('timeRangeReason').value.trim();
+    if (!reason) {
+        alert('Please enter a reason for blocking this time. It will appear in the Bookings page.');
+        return false;
+    }
+    return true;
+}
+function validateWholeDayReason() {
+    const reason = document.getElementById('wholeDayReason').value.trim();
+    if (!reason) {
+        alert('Please enter a reason for blocking this day. It will appear in the Bookings page.');
+        return false;
+    }
+    return true;
+}
+</script>
 
 <script th:src="@{/js/main.js}"></script>
 <script th:src="@{/js/admin-notifications.js}"></script>
