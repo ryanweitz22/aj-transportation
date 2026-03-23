@@ -63,10 +63,6 @@
             font-size: 0.78rem;
             color: var(--text-muted);
         }
-        .form-group small.auto-hint {
-            color: var(--primary);
-            font-style: italic;
-        }
         .span-2 { grid-column: span 2; }
         .form-actions {
             display: flex;
@@ -135,6 +131,25 @@
             font-style: italic;
             margin: 0;
         }
+
+        /* Google Places dropdown styling — matches user booking page */
+        .pac-container {
+            z-index: 9999 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important;
+            border: 1px solid var(--border) !important;
+            font-family: 'DM Sans', sans-serif !important;
+            margin-top: 4px !important;
+        }
+        .pac-item {
+            padding: 10px 14px !important;
+            font-size: 0.875rem !important;
+            cursor: pointer !important;
+        }
+        .pac-item:hover, .pac-item-selected {
+            background: var(--bg) !important;
+        }
+
         @media (max-width: 640px) {
             .form-grid { grid-template-columns: 1fr; }
             .span-2 { grid-column: span 1; }
@@ -181,7 +196,8 @@
         <div>
             <h1 class="admin-title">Create Trip Slot</h1>
             <p style="color:var(--text-muted);font-size:0.9rem;">
-                Enter pickup and dropoff — fare and end time are calculated live via Google Maps.
+                Enter pickup and dropoff — suggestions, fare and route label
+                are all generated automatically.
             </p>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
@@ -219,8 +235,8 @@
                 <span class="icon">🗺️</span>
                 <div>
                     <strong>Google Maps mode.</strong>
-                    Enter both addresses — the route label, fare and end time
-                    will calculate automatically as you type.
+                    Start typing an address and select from the suggestions —
+                    the route label and fare calculate automatically once both are filled.
                 </div>
             </div>
 
@@ -248,7 +264,7 @@
                         <small id="timeHint">Between 04:00 and 23:00</small>
                     </div>
 
-                    <!-- Pickup Address -->
+                    <!-- Pickup Address — Google Places Autocomplete -->
                     <div class="form-group">
                         <label for="pickupAddress">
                             Pickup Address *
@@ -256,12 +272,12 @@
                         </label>
                         <input type="text" id="pickupAddress" name="pickupAddress"
                                required
-                               placeholder="e.g. 12 Long Street, Cape Town"
-                               oninput="onAddressInput()"/>
-                        <small>Full street address</small>
+                               placeholder="Start typing a pickup address..."
+                               autocomplete="off"/>
+                        <small>Select from the dropdown suggestions</small>
                     </div>
 
-                    <!-- Dropoff Address -->
+                    <!-- Dropoff Address — Google Places Autocomplete -->
                     <div class="form-group">
                         <label for="dropoffAddress">
                             Dropoff Address *
@@ -269,27 +285,25 @@
                         </label>
                         <input type="text" id="dropoffAddress" name="dropoffAddress"
                                required
-                               placeholder="e.g. Cape Town International Airport"
-                               oninput="onAddressInput()"/>
-                        <small>Full street address</small>
+                               placeholder="Start typing a dropoff address..."
+                               autocomplete="off"/>
+                        <small>Select from the dropdown suggestions</small>
                     </div>
 
-                    <!-- Route Label — auto-filled, still editable -->
+                    <!-- Route Label — auto-generated, still editable -->
                     <div class="form-group span-2">
                         <label for="label">
                             Route Label *
                             <span id="autoLabelBadge" style="display:none;"
-                                  class="maps-badge">✨ Auto-filled</span>
+                                  class="maps-badge">✨ Auto-generated</span>
                         </label>
                         <input type="text" id="label" name="label" required
-                               placeholder="Auto-filled from addresses, or type manually"
+                               placeholder="Auto-generated once both addresses are selected"
                                maxlength="100"
                                oninput="labelEditedManually = true;
                                         document.getElementById('autoLabelBadge').style.display='none';
                                         this.classList.remove('auto-filled');"/>
-                        <small id="labelHint">
-                            Shown to customers on the booking calendar
-                        </small>
+                        <small>Shown to customers on the booking calendar. Edit freely.</small>
                     </div>
 
                     <!-- Live fare preview -->
@@ -297,7 +311,7 @@
                         <div class="fare-preview" id="farePreview">
                             <div class="fare-preview-title">Live Fare Preview</div>
                             <p class="fare-waiting" id="fareWaiting">
-                                Enter both addresses above to see the calculated fare and distance.
+                                Select both addresses above to see the calculated fare and distance.
                             </p>
                             <div class="fare-rows" id="fareRows" style="display:none;">
                                 <div class="fare-row-item">
@@ -310,7 +324,9 @@
                                 </div>
                                 <div class="fare-row-item">
                                     <span class="fare-row-label">End Time</span>
-                                    <span class="fare-row-value" id="fareEndTime">Set on save</span>
+                                    <span class="fare-row-value" id="fareEndTime">
+                                        Calculated on save
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -332,29 +348,25 @@
 </div>
 </div>
 
+<!-- ── Logic ── -->
 <script>
-    let fareTimer        = null;
+    let fareTimer           = null;
     let labelEditedManually = false;
 
-    // ── Auto-fill route label from addresses ──────────────────────────────────
-    function onAddressInput() {
+    // ── Called after a Places suggestion is selected ──────────────────────────
+    function onAddressSelected() {
         const pickup  = document.getElementById('pickupAddress').value.trim();
         const dropoff = document.getElementById('dropoffAddress').value.trim();
         const labelEl = document.getElementById('label');
         const badge   = document.getElementById('autoLabelBadge');
 
-        // Only auto-fill if admin hasn't manually edited the label
+        // Auto-generate route label from the first part of each address
         if (!labelEditedManually && pickup && dropoff) {
-            // Use a short version — first part before the first comma
             const shortPickup  = pickup.split(',')[0].trim();
             const shortDropoff = dropoff.split(',')[0].trim();
             labelEl.value = shortPickup + ' → ' + shortDropoff;
             labelEl.classList.add('auto-filled');
             badge.style.display = 'inline-flex';
-        } else if (!labelEditedManually && (!pickup || !dropoff)) {
-            labelEl.value = '';
-            labelEl.classList.remove('auto-filled');
-            badge.style.display = 'none';
         }
 
         scheduleFareCalc();
@@ -363,7 +375,7 @@
     // ── Live fare calculation ─────────────────────────────────────────────────
     function scheduleFareCalc() {
         clearTimeout(fareTimer);
-        fareTimer = setTimeout(calculateFare, 800);
+        fareTimer = setTimeout(calculateFare, 600);
     }
 
     async function calculateFare() {
@@ -376,7 +388,7 @@
         if (!pickup || !dropoff) {
             preview.className     = 'fare-preview';
             waiting.style.display = 'block';
-            waiting.textContent   = 'Enter both addresses above to see the calculated fare and distance.';
+            waiting.textContent   = 'Select both addresses above to see the calculated fare and distance.';
             rows.style.display    = 'none';
             return;
         }
@@ -395,10 +407,10 @@
             if (data.success) {
                 document.getElementById('fareDistance').textContent =
                     parseFloat(data.distanceKm).toFixed(1) + ' km';
-                document.getElementById('fareAmount').textContent  =
+                document.getElementById('fareAmount').textContent =
                     'R' + parseFloat(data.fare).toFixed(2);
                 document.getElementById('fareEndTime').textContent =
-                    'Calculated on save (ETA + 15 min)';
+                    'Calculated on save (ETA + 15 min buffer)';
 
                 preview.className     = 'fare-preview ready';
                 waiting.style.display = 'none';
@@ -406,35 +418,33 @@
             } else {
                 preview.className     = 'fare-preview error';
                 waiting.style.display = 'block';
-                waiting.textContent   = '⚠️ Could not calculate fare. Check the addresses and try again.';
+                waiting.textContent   = '⚠️ Could not calculate. Check the addresses.';
                 rows.style.display    = 'none';
             }
         } catch (e) {
             preview.className     = 'fare-preview error';
             waiting.style.display = 'block';
-            waiting.textContent   = '⚠️ Network error. Fare will be calculated when you save.';
+            waiting.textContent   = '⚠️ Network error. Fare will be calculated on save.';
             rows.style.display    = 'none';
         }
     }
 
     // ── Date / time validation ────────────────────────────────────────────────
     function validateDateTime() {
-        const dateEl  = document.getElementById('date');
-        const timeEl  = document.getElementById('startTime');
+        const dateEl   = document.getElementById('date');
+        const timeEl   = document.getElementById('startTime');
         const dateHint = document.getElementById('dateHint');
         const timeHint = document.getElementById('timeHint');
 
         const selectedDate = dateEl.value;
         const selectedTime = timeEl.value;
-
         if (!selectedDate || !selectedTime) return true;
 
-        const now       = new Date();
-        const todayStr  = now.toISOString().split('T')[0];
-        const nowHHMM   = now.getHours().toString().padStart(2,'0')
-                        + ':' + now.getMinutes().toString().padStart(2,'0');
+        const now      = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const nowHHMM  = now.getHours().toString().padStart(2,'0')
+                       + ':' + now.getMinutes().toString().padStart(2,'0');
 
-        // Past date check
         if (selectedDate < todayStr) {
             dateEl.style.borderColor = '#dc2626';
             dateHint.textContent     = '❌ This date has already passed.';
@@ -446,7 +456,6 @@
             dateHint.style.color     = '';
         }
 
-        // Past time check — only matters if date is today
         if (selectedDate === todayStr && selectedTime <= nowHHMM) {
             timeEl.style.borderColor = '#dc2626';
             timeHint.textContent     = '❌ This time has already passed today.';
@@ -463,19 +472,70 @@
 
     // ── Form submit guard ─────────────────────────────────────────────────────
     function validateForm() {
-        const valid = validateDateTime();
-        if (!valid) {
-            return false;
-        }
-
+        if (!validateDateTime()) return false;
         const pickup  = document.getElementById('pickupAddress').value.trim();
         const dropoff = document.getElementById('dropoffAddress').value.trim();
         if (!pickup || !dropoff) {
-            alert('Please enter both a pickup and dropoff address.');
+            alert('Please select both a pickup and dropoff address from the suggestions.');
             return false;
         }
-
         return true;
+    }
+
+    // ── Google Places Autocomplete — same setup as user booking page ──────────
+    function initAutocomplete() {
+        const SA_BOUNDS = new google.maps.LatLngBounds(
+            new google.maps.LatLng(-35.0, 17.5),
+            new google.maps.LatLng(-22.0, 33.0)
+        );
+        const OPTIONS = {
+            bounds: SA_BOUNDS,
+            componentRestrictions: { country: 'za' },
+            fields: ['formatted_address', 'geometry', 'name'],
+            strictBounds: false,
+            types: ['geocode', 'establishment']
+        };
+
+        const pickupAC  = new google.maps.places.Autocomplete(
+            document.getElementById('pickupAddress'), OPTIONS
+        );
+        const dropoffAC = new google.maps.places.Autocomplete(
+            document.getElementById('dropoffAddress'), OPTIONS
+        );
+
+        // When a suggestion is selected, update the input value
+        // with the full formatted address then trigger label + fare
+        pickupAC.addListener('place_changed', () => {
+            const place = pickupAC.getPlace();
+            if (place && place.formatted_address) {
+                document.getElementById('pickupAddress').value = place.formatted_address;
+            }
+            onAddressSelected();
+        });
+
+        dropoffAC.addListener('place_changed', () => {
+            const place = dropoffAC.getPlace();
+            if (place && place.formatted_address) {
+                document.getElementById('dropoffAddress').value = place.formatted_address;
+            }
+            onAddressSelected();
+        });
+    }
+</script>
+
+<!-- Load Google Maps Places API using the same key as the booking page -->
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const GMAPS_KEY = /*[[${@environment.getProperty('google.maps.api-key')}]]*/ '';
+    /*]]>*/
+</script>
+<script>
+    if (GMAPS_KEY) {
+        const s = document.createElement('script');
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places&callback=initAutocomplete`;
+        s.async = true;
+        s.defer = true;
+        document.head.appendChild(s);
     }
 </script>
 
