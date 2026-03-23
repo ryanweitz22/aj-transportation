@@ -17,14 +17,15 @@
 - Customers register via email / phone number / username / password
 - Email verification exists but is currently bypassed for development — all users have `email_verified = true` set manually in Supabase
 - User booking calendar starts from today — past days hidden, past time slots on today greyed out and unclickable
-- Calendar shows: green slots (admin-created trips — book immediately), teal ghost slots (open business hours — any user can book), amber/pending slots (slot just booked, awaiting payment/approval), red slots (confirmed booked), grey (blocked/past/closed)
-- **FUTURE DAY bookings:** Clicking a green OR teal slot → 2-step modal → Step 1: enter pickup + dropoff (Google Places Autocomplete), Step 2: shows calculated fare + "Pay Now" → user redirected to PayFast hosted payment page → payment success = auto-CONFIRMED + emails sent. No admin approval needed for future days.
-- **TODAY bookings:** Same modal flow → "Request Booking" → waiting screen (120s) → admin accepts → user redirected to PayFast to pay → payment success = CONFIRMED. Admin rejects = no payment ever initiated.
+- Calendar shows three slot types: green slots (admin-created trips — bookable), red slots (already booked — unavailable), grey slots (blocked by admin or past time — unavailable)
+- Clicking a green slot → 2-step modal → Step 1: enter pickup + dropoff (Google Places Autocomplete), Step 2: shows calculated fare (R8/km, min R50) + "Pay Now" button → booking submitted
+- **The ONLY difference between a today booking and a future booking is how payment is processed — the modal, the slot colours, and the user experience are identical:**
+  - **TODAY bookings:** booking submitted → waiting screen (120s) → admin accepts → user redirected to PayFast to pay → payment success = CONFIRMED. Admin rejects = no payment ever initiated.
+  - **FUTURE DAY bookings:** booking submitted → user redirected directly to PayFast → payment success = auto-CONFIRMED + emails sent. No admin approval needed.
 - **ABANDONED payments (future day):** If user reaches PayFast but does not complete payment within 5 minutes, a scheduled task auto-cancels the booking and frees the slot.
 - **Failed/cancelled payments:** Booking immediately CANCELLED, trip immediately back to AVAILABLE. User must start a fresh booking — no retry on same booking.
 - Admin receives a hard modal popup lock on ALL admin pages whenever a pending booking exists — cannot interact with page until they Accept or Reject. Post-action pause is 3500ms before polling resumes
 - Trip pricing: R8.00/km, minimum fare R50.00 — calculated via Google Maps Distance Matrix API — fare is fixed at booking time and cannot be altered by admin
-- Open business hours slots: if no admin-created trip exists, a trip is created on the fly when user books. These on-the-fly trips (label = "User Request") are DELETED (not status-changed) if rejected/cancelled — not kept in DB
 - Admin navbar: Bookings | Manage Slots | Block Time | Book for Client | Users | Logs
 - Admin Bookings tab: read-only view of all upcoming trips with user details and payment status. No action buttons — all actions on Manage Slots
 - Admin Manage Slots: full CRUD — block, unblock, cancel (1-hour rule), delete. Shows payment status per booking. Admin can "Mark as Paid (Cash)" for any CONFIRMED booking
@@ -85,16 +86,16 @@
 26. **Booking statuses**: `PENDING_APPROVAL` → `AWAITING_PAYMENT` (today flow: admin accepted, user must now pay) or `CONFIRMED` (future flow: payment succeeded, or admin cash booking) or `REJECTED` (admin rejected) or `CANCELLED` (user cancelled / timed out / payment failed) or `EXPIRED` (auto-cancelled after timeout)
 27. **Payment statuses on Booking**: `UNPAID` → `AWAITING_PAYMENT` (today flow: admin accepted, awaiting PayFast) → `PAID` (PayFast success) or `FAILED` (PayFast failure). Cash bookings: immediately `CASH`. Never changes from PAID once set.
 28. **Trip statuses**: `AVAILABLE` → `PENDING` (booking submitted) → `BOOKED` (confirmed/paid) or back to `AVAILABLE` (rejected/cancelled/payment failed)
-29. **On-the-fly trips** (label = "User Request") MUST be DELETED not status-changed when rejected/cancelled/payment failed. Delete booking record FIRST (removes FK), then delete trip. This order is critical
+29. **There are NO on-the-fly trips and NO open-slot booking flow.** Users can ONLY book admin-created trips (green slots). The `createBookingForOpenSlot()` method, `handleOpenSlotClick()` JS function, Modal 2 (amber request modal), `POST /bookings/request`, and all related code were dead/unfinished code and have been removed in Batch 0.
 30. **`admin-notifications.js`** polls `/bookings/pending-count` every 3 seconds and shows a hard modal lock on all admin pages when pending bookings exist — cannot dismiss without responding. Post-action pause is **3500ms** (not 2000ms). For TODAY bookings, after admin accepts, the waiting screen redirects user to PayFast — admin popup disappears normally.
-31. **`booking-waiting.html`** is saved as `booking-waiting.html` (with hyphen) and the controller returns `"user/booking-waiting"` — these MATCH correctly. After CONFIRMED status (future day auto-confirm), page does NOT redirect here — user goes straight to `payment-pending.html`. For TODAY bookings, CONFIRMED on the waiting screen means redirect to PayFast, NOT to dashboard.
+31. **`booking-waiting.html`** is only used for TODAY bookings. It polls `/bookings/status/{id}` and on `AWAITING_PAYMENT` status (admin accepted) redirects the user to `/payment/initiate/{id}`. For FUTURE DAY bookings the user goes directly to `/payment/initiate/{id}` — the waiting screen is never shown.
 32. **`BookingService.java` injects `TripRepository` directly** — do not remove this. It updates trip status within the same `@Transactional` as the booking update to avoid nested transaction conflicts on Supabase pooler
 33. **Never use nested `@Transactional` calls between services for booking/trip status updates** — always do both the booking save and trip status update in the same transaction in `BookingService`
 34. **`Booking.java`** uses `FetchType.EAGER` for both `user` and `trip` relationships — do NOT change to LAZY or LazyInitializationException will crash the user dashboard
 35. `show-sql=false` in `application.properties` — do not re-enable, SQL logging adds extra round-trips
 36. **TODAY booking expiry timeout remains 120 seconds** (EXPIRY_SECONDS = 120 in BookingService) — this is the admin response window. FUTURE DAY payment abandonment timeout is **5 minutes** (300 seconds), handled separately by a `@Scheduled` task in `PaymentService`.
 37. **`ObjectMapper` in `BookingsController` and `AdminDashboardController`** must have `mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)` — without this, `LocalDate` and `LocalTime` serialize as arrays `[2026,3,20]` instead of strings `"2026-03-20"` which breaks the JS calendar
-38. **`TripService.getVisibleTripsForWeek()`** returns ALL statuses including BLOCKED — do not revert to filtering out BLOCKED trips. The JS calendar renders BLOCKED as grey and suppresses ghost slots for that time window
+38. **`TripService.getVisibleTripsForWeek()`** returns ALL statuses including BLOCKED — do not revert to filtering out BLOCKED trips. The JS calendar renders BLOCKED as grey
 39. **Admin Bookings tab and Manage Slots** both use `BookingRepository.findByTripIdAndStatusNot()` to build a `bookingByTripId` map — this is how user name/phone shows in the table for BOOKED trips
 40. **Admin Manage Slots 1-hour cancel rule** — `AdminTripController.cancelBooking()` checks `minutesUntilTrip >= 60` server-side before cancelling. Template shows greyed "🔒 Too close" button when < 60 minutes away
 41. **BLOCKED trips show their reason** in the Booked By column on both Bookings and Manage Slots pages. Reason is required when blocking via Block Time page
@@ -103,13 +104,15 @@
 44. **Admin calendar default** — week view starts from today not Monday. Day/month views work normally
 45. **PayFast integration uses NO external SDK** — plain HTTP POST with MD5 signature and ITN (Instant Transaction Notification) webhook. All PayFast logic lives in `PayFastService.java`. pom.xml does NOT change for Phase 9.
 46. **PayFast notify URL (`/payment/notify`) MUST be publicly accessible** — it is called server-to-server by PayFast with no session/cookie. It must be whitelisted in `SecurityConfig.java` as a public POST endpoint. During local dev, use ngrok to expose localhost.
-47. **PayFast pre-auth (today bookings):** Uses `payment_type=authorize` in the PayFast request. On admin accept, a capture call is made to PayFast API using the `pf_payment_id` stored in the `Payment` record. On admin reject, a void/cancel call is made. If PayFast does not support pre-auth on the merchant's plan, fallback is: user pays after admin accepts (Option 3 flow — admin accepts first, THEN user pays).
+47. **PayFast pre-auth (today bookings):** Uses `payment_type=authorize` in the PayFast request. On admin accept, a capture call is made to PayFast API using the `pf_payment_id` stored in the `Payment` record. On admin reject, a void/cancel call is made. If PayFast does not support pre-auth on the merchant's plan, fallback is Option 3: admin accepts first, THEN user pays.
 48. **PayFast ITN (webhook) verification:** Must verify the MD5 signature AND call back PayFast's `validate` endpoint to confirm the ITN is genuine before updating any booking/payment status.
-49. **`Payment.java`** stores `payfast_payment_id` (PayFast's internal ID for capture/void), `payfast_token` (for pre-auth recurring/capture), and `payment_type` (OZOW legacy field — rename/reuse as needed or add new fields). Hibernate `ddl-auto=update` will add new columns automatically.
+49. **`Payment.java`** stores `payfastPaymentId` (PayFast's internal ID for capture/void), `payfastToken` (for pre-auth capture), and `paymentType` (`PAYFAST` or `CASH`). Column `ozow_reference` was renamed to `payfast_payment_id` in the DB via SQL migration before Phase 9 began.
 50. **Admin cash booking** — only accessible via `/admin/calendar-client` (the "Book for Client" page). The cash payment option is NOT available to regular users at any URL. `SecurityConfig` must restrict `/admin/calendar-client/**` to ADMIN role only.
-51. **Email is sent by `EmailService.java`** (new in Phase 9) — uses existing Spring Mail config. Sends: (a) confirmation to user on CONFIRMED+PAID, (b) notification to admin on CONFIRMED+PAID for future-day bookings, (c) confirmation to client on admin cash booking.
+51. **Email is sent by `EmailService.java`** (new in Phase 9) — uses existing Spring Mail config. Sends: (a) confirmation to user on CONFIRMED+PAID, (b) notification to admin on auto-confirmed future-day bookings, (c) confirmation to client on admin cash booking.
 52. **`/payment/notify` must use `@Transactional`** — it updates both Booking and Trip status. Same rules apply as all other booking/trip updates: do both in same transaction using `TripRepository` directly, no nested service calls.
 53. **pom.xml — NO changes needed for Phase 9.** PayFast uses plain HTTP via `RestTemplate` (already declared in `WebConfig.java`) + MD5 hashing via `java.security.MessageDigest` (built into Java). No new dependencies.
+54. **`calendar.js` — only three slot types exist:** `slot-available` (green, admin-created AVAILABLE trips — clickable), `slot-booked` (red, BOOKED trips — not clickable), `slot-blocked` (grey, BLOCKED or past — not clickable). No other slot types. No open-hours ghost slots. No amber slots. No teal slots.
+55. **`bookings.js` modal button is always "Pay Now"** — there is no date-based label switching. The same modal and same button label is used for all bookings. The backend determines whether it's a today or future booking and routes accordingly.
 
 ---
 
@@ -128,6 +131,7 @@ payfast.merchant-id=YOUR_MERCHANT_ID
 payfast.merchant-key=YOUR_MERCHANT_KEY
 payfast.passphrase=YOUR_PASSPHRASE
 payfast.sandbox=true
+payfast.preauth-enabled=false
 ```
 When `payfast.sandbox=true`, all URLs point to `https://sandbox.payfast.co.za`. Set to `false` for production.
 
@@ -164,13 +168,14 @@ When `payfast.sandbox=true`, all URLs point to `https://sandbox.payfast.co.za`. 
 ### Phase 7 — Admin Dashboard: ✅ COMPLETE
 ### Phase 8 — Google Maps + Price-Per-Km: ✅ COMPLETE
 ### Phase 8.5 — Booking Flow: ✅ COMPLETE
-### Phase 9 — PayFast Payment Integration: 🔄 IN PROGRESS
+### Phase 8.7 — Payment Architecture & Context Update: ✅ COMPLETE
+### Phase 9 — PayFast Payment Integration: 🔄 IN PROGRESS (Batch 0 next)
 ### Phase 10 — SMS Notifications: ⬜ NOT STARTED
 ### Phase 11 — Security Hardening: ⬜ NOT STARTED
 ### Phase 12 — Mobile Responsiveness: ⬜ NOT STARTED
 ### Phase 13 — Deployment: ⬜ NOT STARTED
 
-> ⚠️ NOTE: Email notifications (confirmation to user, notification to admin) are now part of Phase 9, not Phase 10. Phase 10 is SMS only.
+> ⚠️ NOTE: Email notifications (confirmation to user, notification to admin) are part of Phase 9, not Phase 10. Phase 10 is SMS only.
 
 ---
 
@@ -182,19 +187,16 @@ When `payfast.sandbox=true`, all URLs point to `https://sandbox.payfast.co.za`. 
 | Supabase MaxClientsInSessionMode | Port changed to 6543 + HikariCP pool size 2 |
 | App crashes after ~3 minutes of use | Removed `connection-test-query`, increased `keepalive-time` to 300s, `max-lifetime` to 1800s |
 | LazyInitializationException on user dashboard | `Booking.java` changed to `FetchType.EAGER` for Trip and User |
-| On-the-fly trips orphaned after rejection | Booking deleted first (FK), then trip deleted — both in same `@Transactional` |
 | Accept loops / user sees cancelled after accept | `acceptBooking()` now updates booking + trip in single transaction using `TripRepository` directly — no nested service call |
 | Admin popup reappears after accept/reject | `admin-notifications.js` stops polling immediately on respond, waits **3500ms**, then resumes |
-| User waiting screen never received CONFIRMED/REJECTED | `getBookingStatusForPolling()` returns "REJECTED" if booking not found (deleted on-the-fly trip) |
-| Ghost slots not suppressed for BOOKED/PENDING/BLOCKED trips | `calendar.js` uses `bhClose` as fallback end time for non-AVAILABLE trips without endTime. BLOCKED trips now included in visible trips data |
-| `booking-waiting.html` filename mismatch | File renamed to `booking-waiting.html` — matches controller return `"user/booking-waiting"` |
+| User waiting screen never received CONFIRMED/REJECTED | `getBookingStatusForPolling()` returns "REJECTED" if booking not found |
+| `booking-waiting.html` filename mismatch | File saved as `booking-waiting.html` — matches controller return `"user/booking-waiting"` |
 | Past time slot booking | `isPastSlot()` in `BusinessHoursService` blocks past times |
 | Admin landing on user dashboard | `AuthController` checks role, redirects admin to `/admin/dashboard` |
 | RestTemplate missing bean | `WebConfig.java` with `@Bean RestTemplate` |
 | `style.css` broken CSS block | Fully rewritten |
 | Date/time serialized as arrays in JS calendar | `ObjectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)` added to `BookingsController` and `AdminDashboardController` |
-| BLOCKED slots showing as bookable teal ghost slots | `TripService.getVisibleTripsForWeek()` changed to return ALL statuses — JS renders BLOCKED as grey |
-| User not redirected after booking confirmed | Updated in Phase 9 — CONFIRMED now redirects to PayFast or payment-success page, not dashboard directly |
+| BLOCKED slots rendering incorrectly | `TripService.getVisibleTripsForWeek()` returns ALL statuses including BLOCKED — JS renders as grey |
 | Past trips showing on admin pages | Filter applied in `AdminDashboardController` and `AdminTripController` — past trips hidden except in Logs |
 | User calendar starting from past Monday | `BookingsController` default week start changed to `LocalDate.now()` |
 
@@ -204,9 +206,8 @@ When `payfast.sandbox=true`, all URLs point to `https://sandbox.payfast.co.za`. 
 
 1. **`?prepareThreshold=0`** — verify this is still in `application-local.properties` after any restart. Every prepared statement crash traces back to this being missing
 2. **`bookings-pending.html`** at `/admin/bookings/pending` — still exists but is no longer linked from any navbar. Can be deleted in a future cleanup
-3. **Duplicate bookings for same open slot** — two users clicking the same ghost slot simultaneously could both succeed. `createBooking()` does trip status check + mark PENDING in one transaction but concurrent load hasn't been tested under high traffic
-4. **PayFast notify URL requires public internet access** — during local development, ngrok must be running and `app.base-url` in `application-local.properties` must be set to the ngrok HTTPS URL. The app will still run without this but PayFast webhooks won't reach it (payments will appear stuck until manual resolution)
-5. **PayFast pre-auth availability** — card pre-auth (hold then capture for today bookings) requires PayFast to enable it on Ajmal's merchant account. If not available, fallback is Option 3: admin accepts first, then user pays. This is handled by a `payfast.preauth-enabled=true/false` flag in `application-local.properties`
+3. **PayFast notify URL requires public internet access** — during local development, ngrok must be running and `app.base-url` in `application-local.properties` must be set to the ngrok HTTPS URL. The app will still run without this but PayFast webhooks won't reach it
+4. **PayFast pre-auth availability** — card pre-auth (hold then capture for today bookings) requires PayFast to enable it on Ajmal's merchant account. If not available, fallback is Option 3: admin accepts first, then user pays. Controlled by `payfast.preauth-enabled=true/false` in `application-local.properties`
 
 ---
 
@@ -215,13 +216,13 @@ When `payfast.sandbox=true`, all URLs point to `https://sandbox.payfast.co.za`. 
 ```
 src/main/java/com/ajtransportation/app/
 ├── config/
-│   ├── SecurityConfig.java              ✅ /payment/notify whitelisted as public POST. /admin/calendar-client restricted to ADMIN
+│   ├── SecurityConfig.java              ⚠️ NEEDS UPDATE — /payment/notify whitelisted as public POST. /admin/calendar-client restricted to ADMIN
 │   └── WebConfig.java                   ✅ RestTemplate bean (used by PayFastService)
 ├── controller/
 │   ├── PageController.java              ✅ GET + POST /contact
 │   ├── AuthController.java              ✅ role-aware /dashboard redirect — admin always goes to /admin/dashboard
-│   ├── BookingsController.java          ⚠️ NEEDS UPDATE — bookTrip() must redirect to /payment/initiate/{id} instead of waiting screen for future-day bookings
-│   ├── AdminBookingController.java      ⚠️ NEEDS UPDATE — acceptBooking() must: (a) for today bookings set status AWAITING_PAYMENT so waiting screen redirects to PayFast; (b) trigger PayFast capture if pre-auth enabled
+│   ├── BookingsController.java          ⚠️ NEEDS UPDATE — bookTrip() routes to PayFast directly for future-day; to waiting screen for today. Dead open-slot branch removed.
+│   ├── AdminBookingController.java      ⚠️ NEEDS UPDATE — acceptBooking() sets AWAITING_PAYMENT for today bookings; triggers PayFast capture if pre-auth enabled
 │   ├── AdminTripController.java         ✅ includes BLOCKED in listTrips. 1-hour cancel rule. cancel-block/{id} endpoint
 │   ├── AdminDashboardController.java    ✅ week starts from today. Past trips filtered. Stats from rawTrips. bookingByTripId map
 │   ├── AdminBlockController.java        ✅ /admin/block GET/POST time-range/whole-day/unblock
@@ -234,26 +235,26 @@ src/main/java/com/ajtransportation/app/
 │   ├── Trip.java                        ✅
 │   ├── Booking.java                     ✅ FetchType.EAGER for user + trip
 │   ├── TripRequest.java                 ✅ (legacy — unused)
-│   ├── Payment.java                     ⚠️ NEEDS UPDATE — add payfastPaymentId, payfastToken, paymentType fields. Hibernate ddl-auto=update will add columns automatically.
+│   ├── Payment.java                     ⚠️ NEEDS UPDATE — rename ozowReference → payfastPaymentId, add payfastToken + paymentType fields
 │   ├── PricingConfig.java               ✅
 │   └── RegisterRequest.java             ✅
 ├── repository/
 │   ├── UserRepository.java              ✅
 │   ├── TripRepository.java              ✅
 │   ├── BookingRepository.java           ✅
-│   ├── TripRequestRepository.java       ✅ (legacy)
-│   ├── PaymentRepository.java           ✅ findByOzowReference → rename to findByPayfastPaymentId in Phase 9
+│   ├── TripRequestRepository.java       ✅ (legacy — unused)
+│   ├── PaymentRepository.java           ⚠️ NEEDS UPDATE — rename findByOzowReference → findByPayfastPaymentId
 │   └── PricingConfigRepository.java     ✅
 ├── service/
-│   ├── BookingService.java              ⚠️ NEEDS UPDATE — acceptBooking() status change to AWAITING_PAYMENT for today bookings; new confirmBookingAfterPayment(); new cancelBookingAfterFailedPayment(); EXPIRY_SECONDS stays 120 for today bookings
+│   ├── BookingService.java              ⚠️ NEEDS UPDATE — acceptBooking() sets AWAITING_PAYMENT for today; new confirmBookingAfterPayment(); new cancelBookingAfterFailedPayment(); dead open-slot methods removed
 │   ├── TripService.java                 ✅
 │   ├── BusinessHoursService.java        ✅ OPEN EVERY DAY 04:00–23:00 + isPastSlot()
 │   ├── GoogleMapsService.java           ✅
 │   ├── UserService.java                 ✅
 │   ├── CustomUserDetailsService.java    ✅
 │   ├── TripRequestService.java          ✅ (legacy — unused)
-│   ├── PayFastService.java              🆕 NEW — builds PayFast request, verifies ITN signature, capture/void for pre-auth
-│   ├── PaymentService.java              🆕 NEW — creates Payment records, handles expiry scheduled task (5 min for future-day), updates payment statuses
+│   ├── PayFastService.java              🆕 NEW — builds PayFast request, verifies ITN, capture/void for pre-auth
+│   ├── PaymentService.java              🆕 NEW — creates Payment records, handles 5-min expiry scheduled task, updates payment statuses
 │   └── EmailService.java               🆕 NEW — sends confirmation email to user + notification to admin
 
 src/main/resources/
@@ -264,34 +265,34 @@ src/main/resources/
 │   │   └── bookings.css                 ✅
 │   └── js/
 │       ├── main.js                      ✅
-│       ├── calendar.js                  ✅
-│       ├── bookings.js                  ⚠️ NEEDS UPDATE — Step 2 modal button changes to "Pay Now" for future-day, "Request Booking" for today. Form action changes accordingly.
-│       └── admin-notifications.js       ⚠️ NEEDS UPDATE — for TODAY bookings, admin accept now polls /payment/status/{id} after the popup closes. Waiting screen behaviour updated.
+│       ├── calendar.js                  ⚠️ NEEDS UPDATE (Batch 0) — remove slot-open-hours rendering, handleOpenSlotClick(), and all open-slot logic. Only slot-available, slot-booked, slot-blocked remain.
+│       ├── bookings.js                  ⚠️ NEEDS UPDATE — remove Modal 2 (amber request modal) and all req* functions. Single modal only. Button always "Pay Now".
+│       └── admin-notifications.js       ⚠️ NEEDS UPDATE — today-flow: after admin accepts, waiting screen polls /payment/status/{id} and redirects to PayFast on AWAITING_PAYMENT
 └── templates/
-    ├── index.html                       ✅
+    ├── index.html                       ⚠️ NEEDS UPDATE — remove Ozow references, update to PayFast
     ├── about.html                       ✅
     ├── contact.html                     ✅
     ├── admin/
     │   ├── dashboard.html               ⚠️ NEEDS UPDATE — add payment status column to bookings table
     │   ├── block.html                   ✅
-    │   ├── bookings-pending.html        ✅ (legacy — no longer linked from navbar)
+    │   ├── bookings-pending.html        (legacy — no longer linked from navbar, delete in future cleanup)
     │   ├── trips-list.html              ⚠️ NEEDS UPDATE — show payment status per booking. Add "Mark as Paid (Cash)" button for CONFIRMED+UNPAID bookings (admin only)
     │   ├── trips-new.html               ✅
     │   ├── pricing.html                 ✅
-    │   ├── requests.html                ✅ (legacy — unused)
+    │   ├── requests.html                (legacy — unused)
     │   ├── users.html                   ✅
     │   ├── logs.html                    ⚠️ NEEDS UPDATE — show payment status column
-    │   └── calendar-client.html         🆕 NEW — admin "Book for Client" view. Same calendar UI as user but with Cash Payment toggle in modal. ADMIN only.
+    │   └── calendar-client.html         🆕 NEW — admin "Book for Client" view. Same calendar UI as user but with Cash Payment toggle. ADMIN only.
     ├── auth/
     │   ├── login.html                   ✅
     │   └── register.html                ✅
     └── user/
-        ├── bookings.html                ✅ Calendar starts from today. Past slots greyed out
-        ├── booking-waiting.html         ⚠️ NEEDS UPDATE — on CONFIRMED (today flow), redirect to PayFast instead of dashboard. New status AWAITING_PAYMENT triggers PayFast redirect.
-        ├── dashboard.html               ⚠️ NEEDS UPDATE — show payment status badge per booking. Remove "Pay Now" button (no retry — fresh booking required on failure)
-        ├── payment-pending.html         🆕 NEW — "Redirecting to payment..." intermediate page with 3-second auto-redirect to PayFast
-        ├── payment-success.html         🆕 NEW — shown after PayFast success redirect. "You're all booked!" with booking summary
-        └── payment-failed.html          🆕 NEW — shown after PayFast cancel/fail redirect. "Payment was not completed." with link to try again
+        ├── bookings.html                ⚠️ NEEDS UPDATE (Batch 0) — remove Modal 2 + open-slot legend item. Single modal. Button = "Pay Now".
+        ├── booking-waiting.html         ⚠️ NEEDS UPDATE — today flow only. On AWAITING_PAYMENT status → redirect to /payment/initiate/{id}. Not used for future-day bookings.
+        ├── dashboard.html               ⚠️ NEEDS UPDATE — show payment status badge per booking
+        ├── payment-pending.html         🆕 NEW — "Redirecting to payment..." with 3-second auto-redirect to PayFast
+        ├── payment-success.html         🆕 NEW — shown after PayFast success redirect. Booking confirmation summary.
+        └── payment-failed.html          🆕 NEW — shown after PayFast cancel/fail redirect. Link to book again.
 ```
 
 ---
@@ -330,7 +331,7 @@ payfast.preauth-enabled=false
 | `/contact` GET + POST | ✅ | Public |
 | `/bookings` | ✅ | Public |
 | `/bookings/book` POST | ✅ | Logged in |
-| `/bookings/waiting/{id}` GET | ✅ | Logged in |
+| `/bookings/waiting/{id}` GET | ✅ | Logged in (today bookings only) |
 | `/bookings/status/{id}` GET | ✅ | Public (polled by JS) |
 | `/bookings/pending-count` GET | ✅ | Public (polled by admin JS) |
 | `/bookings/calculate-fare` GET | ✅ | Public |
@@ -344,7 +345,7 @@ payfast.preauth-enabled=false
 | `/payment/notify` | 🆕 Phase 9 | Public POST (PayFast webhook — no session) |
 | `/payment/success` | 🆕 Phase 9 | Public GET |
 | `/payment/cancel` | 🆕 Phase 9 | Public GET |
-| `/payment/status/{bookingId}` | 🆕 Phase 9 | Logged in (polled by waiting screen) |
+| `/payment/status/{bookingId}` | 🆕 Phase 9 | Logged in (polled by today waiting screen) |
 | `/admin/dashboard` | ✅ | ADMIN |
 | `/admin/bookings/pending` | ✅ | ADMIN (legacy — not linked) |
 | `/admin/bookings/accept/{id}` POST | ✅ | ADMIN |
@@ -445,6 +446,7 @@ For PayFast webhook testing (local dev):
 - Never make nested `@Transactional` service-to-service calls for booking/trip status updates — always update both in `BookingService` using `TripRepository` directly
 - Always provide the **full file** — the user pastes the entire file into VS Code, they cannot do partial edits
 - Always confirm understanding and ask clarifying questions before writing code for complex features
-- **Never reference Ozow anywhere in new code** — the payment gateway is PayFast. Any existing Ozow references (e.g. `findByOzowReference` in PaymentRepository) must be updated to PayFast equivalents
+- **Never reference Ozow anywhere in new code** — the payment gateway is PayFast
+- **Never add teal/ghost/amber/open-hours slot logic** — the calendar has exactly three slot types: green (available), red (booked), grey (blocked/past). Nothing else.
 - **PayFast notify endpoint must always be `@Transactional`** and must update both Booking and Trip in the same transaction
 - **Never expose PayFast credentials in templates or JS** — merchant ID and key are server-side only
