@@ -109,7 +109,7 @@
     <div class="bookings-header">
         <div>
             <h1>Book Your Trip</h1>
-            <p>Green = book now &nbsp;·&nbsp; <span style="color:#92400e;font-weight:600;">Amber = request a trip</span> &nbsp;·&nbsp; Red = already booked</p>
+            <p>Green = available to book &nbsp;·&nbsp; Red = already booked &nbsp;·&nbsp; Grey = unavailable</p>
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
             <span style="font-size:0.85rem;color:var(--text-muted);">Jump to month:</span>
@@ -128,7 +128,6 @@
 
     <div class="calendar-legend">
         <span class="legend-item"><span class="dot dot-available"></span> Available — book now</span>
-        <span class="legend-item"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px;"></span> Open — request trip</span>
         <span class="legend-item"><span class="dot dot-booked"></span> Already booked</span>
     </div>
 
@@ -141,7 +140,7 @@
 
 
 <!-- ═══════════════════════════════════════════════════
-     MODAL 1 — BOOK A GREEN TRIP (2-step)
+     MODAL 1 — BOOK A TRIP (2-step)
      ═══════════════════════════════════════════════════ -->
 <div id="booking-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
@@ -206,7 +205,7 @@
                     </div>
                 </div>
 
-                                                <!-- STEP 2: Confirm -->
+                <!-- STEP 2: Confirm -->
                 <div id="book-step-2" class="hidden">
                     <div class="route-confirm-card">
                         <div class="route-row">
@@ -264,7 +263,7 @@
 
 
 <!-- ═══════════════════════════════════════════════════
-     MODAL 2 — REQUEST AN AMBER TRIP (2-step)
+     MODAL 2 — REQUEST AN OPEN SLOT (2-step)
      ═══════════════════════════════════════════════════ -->
 <div id="request-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
@@ -394,11 +393,6 @@
 
 <script th:src="@{/js/calendar.js}"></script>
 
-<!--
-    Google Maps Places API.
-    Replace YOUR_GOOGLE_MAPS_API_KEY below with the actual key,
-    OR wire it via Thymeleaf if you prefer (see File 3 of 3 notes).
--->
 <script th:inline="javascript">
     /*<![CDATA[*/
     const GMAPS_KEY = /*[[${@environment.getProperty('google.maps.api-key')}]]*/ '';
