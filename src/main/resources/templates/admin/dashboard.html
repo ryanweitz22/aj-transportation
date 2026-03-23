@@ -58,12 +58,10 @@
         <h1 class="admin-title">Bookings</h1>
         <p style="color:var(--text-muted);font-size:0.9rem;" th:text="${viewLabel}"></p>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <a th:href="@{/bookings}" target="_blank" class="btn btn-secondary">
-            🔗 View User Calendar
-        </a>
-        <a th:href="@{/admin/trips/new}" class="btn btn-primary">+ Create Slot</a>
-      </div>
+      <!-- View User Calendar only — Create Slot is on Manage Slots page -->
+      <a th:href="@{/bookings}" target="_blank" class="btn btn-secondary">
+          🔗 View User Calendar
+      </a>
     </div>
 
     <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
@@ -97,13 +95,13 @@
       </div>
     </div>
 
-    <!-- Trips table — view only, all actions on Manage Slots page -->
+    <!-- Trips table — view only -->
     <div class="admin-card" style="margin-top:20px;overflow-x:auto;">
 
       <div th:if="${#lists.isEmpty(trips)}" class="empty-state">
         <p>No trips found for this period.</p>
-        <a th:href="@{/admin/trips/new}" class="btn btn-primary" style="margin-top:12px;">
-            Create a slot →
+        <a th:href="@{/admin/trips}" class="btn btn-primary" style="margin-top:12px;">
+            Go to Manage Slots →
         </a>
       </div>
 
@@ -188,18 +186,18 @@
         </tbody>
       </table>
 
-      <!-- Hint to redirect admin to Manage Slots for actions -->
       <div style="padding:14px 20px;border-top:1px solid var(--border);
                   font-size:0.82rem;color:var(--text-muted);">
           To block, cancel or delete slots go to
-          <a th:href="@{/admin/trips}" style="color:var(--primary);font-weight:600;">
+          <a th:href="@{/admin/trips}"
+             style="color:var(--primary);font-weight:600;">
               Manage Slots →
           </a>
       </div>
 
     </div>
 
-    <!-- Stats -->
+    <!-- Stats — counts from full selected period -->
     <div class="stats-grid" style="margin-top:24px;">
       <div class="stat-card">
         <span class="stat-number" th:text="${availableCount}">0</span>
