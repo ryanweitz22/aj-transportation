@@ -3,13 +3,117 @@
       xmlns:sec="http://www.thymeleaf.org/extras/springsecurity6">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0",name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="_csrf" th:content="${_csrf.token}"/>
     <title>Trip Log — Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        .search-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            background: white;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-full);
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            max-width: 360px;
+            width: 100%;
+        }
+        .search-bar-wrap:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(10,124,110,0.08);
+        }
+        .search-bar-wrap .search-icon {
+            padding: 0 14px;
+            color: var(--text-muted);
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .search-bar-wrap input {
+            border: none;
+            outline: none;
+            font-family: var(--font-body);
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            background: transparent;
+            padding: 10px 0;
+            flex: 1;
+            min-width: 0;
+        }
+        .search-bar-wrap input::placeholder { color: var(--text-muted); }
+        .search-bar-wrap .clear-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0 14px;
+            color: var(--text-muted);
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+        }
+        .search-bar-wrap .clear-btn:hover { color: var(--danger); }
+        .filter-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .filter-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .filter-group input[type="date"] {
+            padding: 9px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: var(--font-body);
+            font-size: 0.875rem;
+            outline: none;
+            background: white;
+        }
+        .filter-group input[type="date"]:focus {
+            border-color: var(--primary);
+        }
+        .search-result-hint {
+            font-size: 0.825rem;
+            color: var(--text-muted);
+            padding: 8px 0 4px;
+        }
+        .search-result-hint strong { color: var(--primary); }
+        .user-in-log {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .user-in-log .u-name  { font-weight: 600; font-size: 0.875rem; color: var(--text-dark); }
+        .user-in-log .u-email { font-size: 0.75rem; color: var(--text-muted); }
+        .user-in-log .u-phone { font-size: 0.75rem; color: var(--text-muted); }
+        .reason-cell {
+            font-size: 0.82rem;
+            color: #92400e;
+            font-style: italic;
+        }
+        .admin-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .admin-table { min-width: 860px; }
+    </style>
 </head>
 <body>
+
 <nav class="navbar">
     <div class="nav-container">
         <a href="/admin/dashboard" class="nav-logo">
@@ -21,7 +125,7 @@
             <a th:href="@{/admin/trips}">Manage Slots</a>
             <a th:href="@{/admin/block}">Block Time</a>
             <a th:href="@{/admin/users}">Users</a>
-            <a th:href="@{/admin/logs}">Logs</a>
+            <a th:href="@{/admin/logs}" class="active">Logs</a>
         </div>
         <div class="nav-actions">
             <span class="nav-user" sec:authentication="name"></span>
@@ -38,60 +142,210 @@
         <a th:href="@{/admin/users}">Users</a>
         <a th:href="@{/admin/logs}">Logs</a>
         <a th:href="@{/logout}">Logout</a>
-        </div>
+    </div>
 </nav>
+
 <div style="padding-top:var(--nav-h);min-height:100vh;background:var(--bg);">
 <div class="admin-page">
-    <div class="admin-header"><h1 class="admin-title">Trip Log</h1></div>
 
+    <div class="admin-header">
+        <div>
+            <h1 class="admin-title">Trip Log</h1>
+            <p style="color:var(--text-muted);font-size:0.9rem;">
+                Full history of all trips — filter by date range or search by user.
+            </p>
+        </div>
+    </div>
+
+    <!-- Filter + Search bar -->
     <div class="admin-card" style="padding:20px 24px;margin-bottom:20px;">
-        <form th:action="@{/admin/logs}" method="get" style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
-            <div style="display:flex;flex-direction:column;gap:4px;">
-                <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);">From</label>
-                <input type="date" name="from" th:value="${from}" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:0.875rem;outline:none;" />
+        <form th:action="@{/admin/logs}" method="get">
+            <div class="filter-row">
+
+                <!-- Date from -->
+                <div class="filter-group">
+                    <label>From</label>
+                    <input type="date" name="from" th:value="${from}"/>
+                </div>
+
+                <!-- Date to -->
+                <div class="filter-group">
+                    <label>To</label>
+                    <input type="date" name="to" th:value="${to}"/>
+                </div>
+
+                <!-- Search -->
+                <div class="filter-group" style="flex:1;min-width:200px;">
+                    <label>Search by user</label>
+                    <div class="search-bar-wrap">
+                        <span class="search-icon">🔍</span>
+                        <input type="text"
+                               name="search"
+                               th:value="${search}"
+                               placeholder="Name, email or phone..."
+                               autocomplete="off"
+                               id="searchInput"/>
+                        <button type="button" class="clear-btn"
+                                onclick="clearSearch()"
+                                th:style="${search != null and !search.isEmpty()} ? '' : 'display:none;'"
+                                id="clearBtn">✕</button>
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div style="display:flex;gap:8px;padding-bottom:1px;">
+                    <button type="submit" class="btn btn-primary btn-sm">Search</button>
+                    <a th:href="@{/admin/logs}" class="btn btn-secondary btn-sm">Reset</a>
+                </div>
+
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px;">
-                <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);">To</label>
-                <input type="date" name="to" th:value="${to}" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:0.875rem;outline:none;" />
-            </div>
-            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-            <a th:href="@{/admin/logs}" class="btn btn-secondary btn-sm">This Month</a>
         </form>
     </div>
 
-    <div class="stats-grid" style="margin-bottom:20px;">
-        <div class="stat-card"><span class="stat-number" th:text="${booked}">0</span><span class="stat-label">Trips Booked</span></div>
-        <div class="stat-card"><span class="stat-number" th:text="${available}">0</span><span class="stat-label">Available Slots</span></div>
-        <div class="stat-card"><span class="stat-number" th:text="'R' + ${#numbers.formatDecimal(revenue,1,2)}">R0</span><span class="stat-label">Revenue</span></div>
+    <!-- Search result hint -->
+    <div th:if="${search != null and !search.isEmpty()}"
+         class="search-result-hint">
+        Showing results for <strong th:text="'&quot;' + ${search} + '&quot;'"></strong>
+        — <span th:text="${#lists.size(trips)}">0</span> trip(s) found.
+        <a th:href="@{/admin/logs}" style="color:var(--primary);margin-left:8px;">Clear search</a>
     </div>
 
-    <div th:if="${#lists.isEmpty(trips)}" class="empty-state"><p>No trips in this date range.</p></div>
+    <!-- Stats -->
+    <div class="stats-grid" style="margin-bottom:20px;">
+        <div class="stat-card">
+            <span class="stat-number" th:text="${booked}">0</span>
+            <span class="stat-label">Trips Booked</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number" th:text="${blocked}">0</span>
+            <span class="stat-label">Blocked Slots</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number"
+                  th:text="'R' + ${#numbers.formatDecimal(revenue,1,2)}">R0</span>
+            <span class="stat-label">Revenue</span>
+        </div>
+    </div>
+
+    <div th:if="${#lists.isEmpty(trips)}" class="empty-state">
+        <p th:if="${search != null and !search.isEmpty()}">
+            No trips found for
+            "<span th:text="${search}"></span>".
+            <a th:href="@{/admin/logs}" style="color:var(--primary);">Clear search →</a>
+        </p>
+        <p th:unless="${search != null and !search.isEmpty()}">
+            No trips in this date range.
+        </p>
+    </div>
 
     <div th:unless="${#lists.isEmpty(trips)}" class="admin-card">
+        <div class="admin-table-wrap">
         <table class="admin-table">
-            <thead><tr><th>Date</th><th>Time</th><th>Route</th><th>Distance</th><th>Fee</th><th>Status</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Route</th>
+                    <th>Distance</th>
+                    <th>Fee</th>
+                    <th>Status</th>
+                    <th>Booked By / Reason</th>
+                    <th>Phone</th>
+                </tr>
+            </thead>
             <tbody>
                 <tr th:each="trip : ${trips}"
-                    th:classappend="${trip.status=='BLOCKED'}?'row-blocked':(${trip.status=='BOOKED'}?'row-booked':'')">
+                    th:classappend="${trip.status == 'BLOCKED'} ? 'row-blocked' :
+                                    (${trip.status == 'BOOKED'}  ? 'row-booked' : '')">
+
                     <td th:text="${#temporals.format(trip.date,'EEE dd MMM yyyy')}"></td>
+
                     <td>
                         <span th:text="${#temporals.format(trip.startTime,'HH:mm')}"></span>
-                        <span th:if="${trip.endTime!=null}"> – <span th:text="${#temporals.format(trip.endTime,'HH:mm')}"></span></span>
+                        <span th:if="${trip.endTime != null}">
+                            – <span th:text="${#temporals.format(trip.endTime,'HH:mm')}"></span>
+                        </span>
                     </td>
-                    <td th:text="${trip.label}"></td>
-                    <td th:text="${trip.distanceKm!=null?trip.distanceKm+' km':'—'}"></td>
-                    <td th:text="${trip.fee!=null?'R'+trip.fee:'—'}"></td>
+
+                    <td>
+                        <span th:if="${trip.pickupAddress != null and trip.dropoffAddress != null}"
+                              style="font-size:0.82rem;">
+                            <span th:text="${trip.pickupAddress}"></span>
+                            →
+                            <span th:text="${trip.dropoffAddress}"></span>
+                        </span>
+                        <span th:unless="${trip.pickupAddress != null and trip.dropoffAddress != null}"
+                              th:text="${trip.label != null ? trip.label : '—'}"></span>
+                    </td>
+
+                    <td th:text="${trip.distanceKm != null ? trip.distanceKm + ' km' : '—'}"></td>
+                    <td th:text="${trip.fee != null ? 'R' + trip.fee : '—'}"></td>
+
                     <td>
                         <span class="status-badge"
-                              th:classappend="${trip.status=='AVAILABLE'}?'badge-available':(${trip.status=='BOOKED'}?'badge-booked':'badge-blocked')"
-                              th:text="${trip.status}"></span>
+                              th:classappend="${trip.status == 'AVAILABLE'} ? 'badge-available' :
+                                              (${trip.status == 'BOOKED'}   ? 'badge-booked'    :
+                                              (${trip.status == 'PENDING'}  ? 'badge-pending'   :
+                                               'badge-blocked'))"
+                              th:text="${trip.status}">
+                        </span>
                     </td>
+
+                    <!-- Booked By / Reason -->
+                    <td>
+                        <!-- BLOCKED — show reason -->
+                        <span th:if="${trip.status == 'BLOCKED'}" class="reason-cell">
+                            <strong style="color:#92400e;font-style:normal;">Admin</strong><br/>
+                            <span th:text="${trip.blockedReason != null ? trip.blockedReason : 'Blocked by admin'}"></span>
+                        </span>
+                        <!-- BOOKED — show user details -->
+                        <div th:if="${trip.status == 'BOOKED' and bookingByTripId[trip.id] != null}"
+                             class="user-in-log">
+                            <span class="u-name"
+                                  th:text="${bookingByTripId[trip.id].user.username}"></span>
+                            <span class="u-email"
+                                  th:text="${bookingByTripId[trip.id].user.email}"></span>
+                        </div>
+                        <span th:if="${trip.status != 'BLOCKED' and trip.status != 'BOOKED'}"
+                              style="color:var(--text-light);">—</span>
+                    </td>
+
+                    <!-- Phone -->
+                    <td>
+                        <span th:if="${bookingByTripId[trip.id] != null
+                                       and bookingByTripId[trip.id].user.phoneNumber != null}"
+                              th:text="${bookingByTripId[trip.id].user.phoneNumber}"
+                              style="font-size:0.875rem;"></span>
+                        <span th:unless="${bookingByTripId[trip.id] != null
+                                           and bookingByTripId[trip.id].user.phoneNumber != null}"
+                              style="color:var(--text-light);">—</span>
+                    </td>
+
                 </tr>
             </tbody>
         </table>
+        </div>
     </div>
+
 </div>
 </div>
+
+<script>
+    // Show/hide clear button as user types
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const clearBtn = document.getElementById('clearBtn');
+        if (clearBtn) clearBtn.style.display = this.value ? 'flex' : 'none';
+    });
+
+    function clearSearch() {
+        const input   = document.getElementById('searchInput');
+        const clearBtn = document.getElementById('clearBtn');
+        if (input)    input.value = '';
+        if (clearBtn) clearBtn.style.display = 'none';
+        input.focus();
+    }
+</script>
+
 <script th:src="@{/js/main.js}"></script>
 <script th:src="@{/js/admin-notifications.js}"></script>
 </body>
