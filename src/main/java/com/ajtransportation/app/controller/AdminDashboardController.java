@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
@@ -76,17 +75,23 @@ public class AdminDashboardController {
                 viewLabel = date.getMonth().toString() + " " + date.getYear();
             }
             default -> {
-                // Week view starts from TODAY not Monday
                 rawTrips  = tripService.getTripsForRange(today, today.plusDays(6));
                 date      = today;
                 viewLabel = today + " – " + today.plusDays(6);
             }
         }
 
-        // Filter — identical logic to Manage Slots:
-        // Past dates → always hidden
-        // Today → only show trips whose start time is still in the future
-        // Future dates → always show
+        // Stats count from the FULL raw list for the selected period
+        // so they accurately reflect what was booked/blocked/available
+        // in that date range regardless of time-of-day filtering
+        long availableCount = rawTrips.stream()
+            .filter(t -> "AVAILABLE".equals(t.getStatus())).count();
+        long bookedCount    = rawTrips.stream()
+            .filter(t -> "BOOKED".equals(t.getStatus())).count();
+        long blockedCount   = rawTrips.stream()
+            .filter(t -> "BLOCKED".equals(t.getStatus())).count();
+
+        // Display list — filter out past times for today only
         List<Trip> trips = rawTrips.stream()
             .filter(t -> {
                 if (t.getDate().isBefore(today)) return false;
@@ -95,9 +100,9 @@ public class AdminDashboardController {
             })
             .collect(Collectors.toList());
 
-        // Build bookingByTripId map for BOOKED/PENDING trips
+        // Build bookingByTripId map
         Map<UUID, Booking> bookingByTripId = new HashMap<>();
-        for (Trip trip : trips) {
+        for (Trip trip : rawTrips) {
             if ("BOOKED".equals(trip.getStatus())
                 || "PENDING".equals(trip.getStatus())) {
                 bookingRepository
@@ -105,13 +110,6 @@ public class AdminDashboardController {
                     .ifPresent(b -> bookingByTripId.put(trip.getId(), b));
             }
         }
-
-        long availableCount = trips.stream()
-            .filter(t -> "AVAILABLE".equals(t.getStatus())).count();
-        long bookedCount = trips.stream()
-            .filter(t -> "BOOKED".equals(t.getStatus())).count();
-        long blockedCount = trips.stream()
-            .filter(t -> "BLOCKED".equals(t.getStatus())).count();
 
         String tripsJson = buildMapper().writeValueAsString(trips);
 
