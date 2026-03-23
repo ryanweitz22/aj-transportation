@@ -7,8 +7,8 @@ import java.util.UUID;
 
 public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
-    // Look up a payment by PayFast's payment ID
-    Optional<Payment> findByPayfastPaymentId(String payfastPaymentId);
+    // Look up a payment by Ozow's transaction reference
+    Optional<Payment> findByOzowReference(String ozowReference);
 
     // Find payment linked to a specific booking
     Optional<Payment> findByBookingId(UUID bookingId);
