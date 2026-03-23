@@ -9,6 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        .reason-cell {
+            font-size: 0.82rem;
+            color: #92400e;
+            font-style: italic;
+        }
+    </style>
 </head>
 <body>
 
@@ -75,20 +82,16 @@
            th:classappend="${currentView == 'month'} ? 'active' : ''"
            class="view-btn">Month</a>
       </div>
-
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <a th:href="@{/admin/dashboard(view=${currentView},date=${prevDate})}"
            class="btn btn-secondary btn-sm">← Prev</a>
-
         <input type="date" id="datePicker"
                th:value="${currentDate}"
                onchange="window.location.href='/admin/dashboard?view=[[${currentView}]]&date='+this.value"
                style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
                       font-family:var(--font-body);font-size:0.875rem;cursor:pointer;outline:none;"/>
-
         <a th:href="@{/admin/dashboard(view=${currentView},date=${nextDate})}"
            class="btn btn-secondary btn-sm">Next →</a>
-
         <a th:href="@{/admin/dashboard(view=${currentView},date=${today})}"
            class="btn btn-secondary btn-sm">Today</a>
       </div>
@@ -112,7 +115,7 @@
             <th>Route</th>
             <th>Fee</th>
             <th>Status</th>
-            <th>Booked By</th>
+            <th>Booked By / Reason</th>
             <th>Phone</th>
             <th>Actions</th>
           </tr>
@@ -131,7 +134,6 @@
               </span>
             </td>
 
-            <!-- Route — show pickup→dropoff if available, else label -->
             <td>
               <span th:if="${trip.pickupAddress != null and trip.dropoffAddress != null}"
                     style="font-size:0.82rem;">
@@ -155,30 +157,39 @@
               </span>
             </td>
 
-            <!-- Booked By — name from booking record -->
+            <!-- Booked By / Reason -->
             <td>
-              <span th:if="${bookingByTripId[trip.id] != null}"
-                    style="font-size:0.85rem;font-weight:600;"
-                    th:text="${bookingByTripId[trip.id].user.username}"></span>
-              <span th:if="${bookingByTripId[trip.id] != null}"
-                    style="display:block;font-size:0.75rem;color:var(--text-muted);"
-                    th:text="${bookingByTripId[trip.id].user.email}"></span>
-              <span th:unless="${bookingByTripId[trip.id] != null}"
+              <!-- BLOCKED — show reason -->
+              <span th:if="${trip.status == 'BLOCKED'}" class="reason-cell">
+                  <strong style="color:#92400e;font-style:normal;">Admin</strong><br/>
+                  <span th:text="${trip.blockedReason != null ? trip.blockedReason : 'Blocked by admin'}"></span>
+              </span>
+              <!-- BOOKED — show user details -->
+              <div th:if="${trip.status == 'BOOKED' and bookingByTripId[trip.id] != null}"
+                   style="display:flex;flex-direction:column;gap:2px;">
+                <span style="font-weight:600;font-size:0.875rem;"
+                      th:text="${bookingByTripId[trip.id].user.username}"></span>
+                <span style="font-size:0.75rem;color:var(--text-muted);"
+                      th:text="${bookingByTripId[trip.id].user.email}"></span>
+              </div>
+              <span th:if="${trip.status != 'BLOCKED' and trip.status != 'BOOKED'}"
                     style="color:var(--text-light);">—</span>
             </td>
 
             <!-- Phone -->
             <td>
-              <span th:if="${bookingByTripId[trip.id] != null and bookingByTripId[trip.id].user.phoneNumber != null}"
+              <span th:if="${bookingByTripId[trip.id] != null
+                             and bookingByTripId[trip.id].user.phoneNumber != null}"
                     style="font-size:0.85rem;"
                     th:text="${bookingByTripId[trip.id].user.phoneNumber}"></span>
-              <span th:unless="${bookingByTripId[trip.id] != null and bookingByTripId[trip.id].user.phoneNumber != null}"
+              <span th:unless="${bookingByTripId[trip.id] != null
+                                 and bookingByTripId[trip.id].user.phoneNumber != null}"
                     style="color:var(--text-light);">—</span>
             </td>
 
             <td class="action-cell">
 
-              <!-- Block — AVAILABLE only -->
+              <!-- AVAILABLE — Block -->
               <form th:if="${trip.status == 'AVAILABLE'}"
                     th:action="@{/admin/dashboard/block/{id}(id=${trip.id})}"
                     method="post" style="display:inline;">
@@ -188,21 +199,30 @@
                         onclick="return confirm('Block this slot?')">Block</button>
               </form>
 
-              <!-- Unblock — BLOCKED only -->
-              <form th:if="${trip.status == 'BLOCKED'}"
-                    th:action="@{/admin/dashboard/unblock/{id}(id=${trip.id})}"
-                    method="post" style="display:inline;">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
-                <button type="submit" class="btn btn-sm btn-success">Unblock</button>
-              </form>
+              <!-- BLOCKED — Unblock + Cancel -->
+              <th:block th:if="${trip.status == 'BLOCKED'}">
+                <form th:action="@{/admin/dashboard/unblock/{id}(id=${trip.id})}"
+                      method="post" style="display:inline;">
+                  <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                  <button type="submit" class="btn btn-sm btn-success">Unblock</button>
+                </form>
+                <form th:action="@{/admin/trips/cancel-block/{id}(id=${trip.id})}"
+                      method="post" style="display:inline;">
+                  <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                  <button type="submit" class="btn btn-sm btn-danger"
+                          onclick="return confirm('Cancel this blocked slot? It will become available again.')">
+                      Cancel
+                  </button>
+                </form>
+              </th:block>
 
-              <!-- Cancel booking — BOOKED only -->
+              <!-- BOOKED — Cancel Booking -->
               <form th:if="${trip.status == 'BOOKED'}"
                     th:action="@{/admin/dashboard/cancel-by-trip/{id}(id=${trip.id})}"
                     method="post" style="display:inline;">
                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                 <button type="submit" class="btn btn-sm btn-danger"
-                        onclick="return confirm('Cancel this booking? The slot will become available again.')">
+                        onclick="return confirm('Cancel this booking? Slot will become available again.')">
                   Cancel Booking
                 </button>
               </form>
@@ -213,7 +233,7 @@
                     method="post" style="display:inline;">
                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                 <button type="submit" class="btn btn-sm btn-danger"
-                        onclick="return confirm('Delete this trip permanently?')">Delete</button>
+                        onclick="return confirm('Delete permanently?')">Delete</button>
               </form>
 
             </td>
@@ -222,7 +242,7 @@
       </table>
     </div>
 
-    <!-- Accurate stats for selected period -->
+    <!-- Stats -->
     <div class="stats-grid" style="margin-top:24px;">
       <div class="stat-card">
         <span class="stat-number" th:text="${availableCount}">0</span>
