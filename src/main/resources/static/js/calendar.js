@@ -4,12 +4,6 @@
  * Calendar always starts from today and shows 7 days forward.
  * Past days are hidden entirely.
  * Past time slots on today are greyed out relative to current time.
- *
- * Three slot types only:
- *   slot-available  — admin-created AVAILABLE trip, clickable, opens booking modal
- *   slot-booked     — BOOKED trip, not clickable
- *   slot-blocked    — BLOCKED trip, not clickable
- *   slot-past-today — any slot/trip in the past on today, not clickable
  */
 
 let currentWeekStart = null;
@@ -38,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function () {
         for (let i = 0; i < 12; i++) {
             const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
             const opt = document.createElement('option');
+            // Jump to that calendar date directly, not Monday of that week
             opt.value = formatDate(d);
             opt.textContent = MONTHS[d.getMonth()] + ' ' + d.getFullYear();
             if (i === 0) opt.selected = true;
@@ -62,11 +57,13 @@ function renderCalendar(trips, businessHours, weekStart) {
     const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const MONTH_NAMES= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    // Build exactly 7 days starting from weekStart, skip any before today
+    // Build exactly 7 days starting from weekStart
+    // Skip any days before today
     const days = [];
     for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
+        // Only include today and future days
         if (d >= today) days.push(d);
     }
 
@@ -80,9 +77,11 @@ function renderCalendar(trips, businessHours, weekStart) {
     const TOTAL_HOURS = 19;
     const PX_HOUR     = getPxHour();
     const TOTAL_H     = PX_HOUR * TOTAL_HOURS;
+    const SLOT_MIN    = 30;
+    const SLOT_H      = Math.max((SLOT_MIN / 60) * PX_HOUR - 3, 24);
 
     // Current time in minutes for greying out past slots on today
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const nowMinutes  = now.getHours() * 60 + now.getMinutes();
 
     let styleTag = document.getElementById('cal-dynamic-style');
     if (!styleTag) {
@@ -142,16 +141,66 @@ function renderCalendar(trips, businessHours, weekStart) {
 
     // ── Day columns ───────────────────────────────────────────────────────────
     days.forEach(day => {
-        const dateStr  = formatDate(day);
-        const isToday  = day.getTime() === today.getTime();
-        const dayTrips = trips
+        const dateStr   = formatDate(day);
+        const isToday   = day.getTime() === today.getTime();
+        const dayTrips  = trips
             .filter(t => t.date === dateStr)
             .sort((a, b) => timeToMin(a.startTime) - timeToMin(b.startTime));
+
+        const bh      = businessHours[dateStr] || {};
+        const bhOpen  = bh.open  ? timeToMin(bh.open)  : null;
+        const bhClose = bh.close ? timeToMin(bh.close) : null;
+        const isOpen  = bhOpen !== null && bhClose !== null;
 
         html += `<div class="cal-day-column" style="height:${TOTAL_H}px;">`;
 
         for (let h = 0; h <= TOTAL_HOURS; h++) {
             html += `<div class="hour-line" style="top:${h * PX_HOUR}px;"></div>`;
+        }
+
+        // ── Ghost / open-hours slots ──────────────────────────────────────────
+        if (isOpen) {
+            let t = bhOpen;
+            while (t < bhClose) {
+                if (t >= CAL_START && t < CAL_END) {
+
+                    // On today, grey out slots that are in the past
+                    const isPastTime = isToday && t < nowMinutes;
+
+                    const covered = dayTrips.some(trip => {
+                        const s = timeToMin(trip.startTime);
+                        const e = trip.endTime
+                            ? timeToMin(trip.endTime)
+                            : (trip.status === 'AVAILABLE' ? s + 60 : bhClose);
+                        return t >= s && t < e;
+                    });
+
+                    if (!covered) {
+                        const topPx   = ((t - CAL_START) / 60) * PX_HOUR;
+                        const timeStr = minToTime(t);
+
+                        if (isPastTime) {
+                            // Grey out past slots on today — not clickable
+                            html += `<div class="trip-slot slot-past-today"
+                                style="top:${topPx}px; height:${SLOT_H}px;">
+                                <span class="slot-time">${timeStr}</span>
+                            </div>`;
+                        } else {
+                            const slotData = JSON.stringify({ date: dateStr, time: timeStr }).replace(/'/g, '&#39;');
+                            html += `<div class="trip-slot slot-open-hours"
+                                style="top:${topPx}px; height:${SLOT_H}px;"
+                                data-open='${slotData}'
+                                onclick="handleOpenSlotClick(this)"
+                                role="button" tabindex="0"
+                                title="Book a trip at ${timeStr}">
+                                <span class="slot-time">${timeStr}</span>
+                                <span class="slot-cta">Book →</span>
+                            </div>`;
+                        }
+                    }
+                }
+                t += SLOT_MIN;
+            }
         }
 
         // ── Admin-created trips ───────────────────────────────────────────────
@@ -166,7 +215,8 @@ function renderCalendar(trips, businessHours, weekStart) {
             const hPx   = Math.max(((ce - cs) / 60) * PX_HOUR - 3, 28);
 
             // On today, grey out trips that are entirely in the past
-            const isPastTime  = isToday && e <= nowMinutes;
+            const isPastTime = isToday && e <= nowMinutes;
+
             const isAvailable = trip.status === 'AVAILABLE' && !isPastTime;
             const isPending   = trip.status === 'PENDING';
             const isBooked    = trip.status === 'BOOKED';
@@ -200,7 +250,7 @@ function renderCalendar(trips, businessHours, weekStart) {
                     style="top:${topPx}px; height:${hPx}px; cursor:default;">
                     <span class="slot-time">${trip.startTime}${endLbl}</span>
                     <span class="slot-label">${escHtml(trip.label || '')}</span>
-                    <span class="slot-status-tag">Awaiting Payment</span>
+                    <span class="slot-status-tag">Awaiting Approval</span>
                 </div>`;
             } else if (isBooked) {
                 html += `<div class="trip-slot slot-booked"
@@ -250,6 +300,17 @@ function handleSlotClick(el) {
     } catch (e) { console.error(e); }
 }
 
+function handleOpenSlotClick(el) {
+    try {
+        const s = JSON.parse(el.getAttribute('data-open'));
+        const slotDateEl = document.getElementById('book-slot-date');
+        const slotTimeEl = document.getElementById('book-slot-time');
+        if (slotDateEl) slotDateEl.value = s.date;
+        if (slotTimeEl) slotTimeEl.value = s.time;
+        openBookingModal(null, null, s.time, null, s.date, null);
+    } catch (e) { console.error(e); }
+}
+
 function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const modal   = document.getElementById('booking-modal');
     const details = document.getElementById('booking-details');
@@ -261,7 +322,7 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     const timeLbl = endTime ? `${startTime} – ${endTime}` : startTime;
     const feeLine = fee && fee !== ''
         ? `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value fee-highlight">R${parseFloat(fee).toFixed(2)}</span></div>`
-        : `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value" style="color:var(--text-muted);">Calculating...</span></div>`;
+        : `<div class="booking-detail-row"><span class="detail-label">Fare</span><span class="detail-value" style="color:var(--text-muted);">To be confirmed by driver</span></div>`;
 
     details.innerHTML = `
         <div class="booking-detail-row"><span class="detail-label">Date</span><span class="detail-value">${displayDate}</span></div>
@@ -273,9 +334,16 @@ function openBookingModal(tripId, label, startTime, endTime, date, fee) {
     document.body.style.overflow = 'hidden';
 }
 
+function closeAllModals() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+    document.body.style.overflow = '';
+    resetBookingModal();
+}
+
 function updateNavButtons() {
     const prev = document.getElementById('prevWeekBtn');
     if (!prev) return;
+    // Prev button disabled when we're already on today's window
     const todayStr = formatDate(new Date());
     const startStr = formatDate(currentWeekStart);
     if (startStr <= todayStr) {
