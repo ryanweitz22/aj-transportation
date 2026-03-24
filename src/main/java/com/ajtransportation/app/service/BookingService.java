@@ -7,6 +7,7 @@ import com.ajtransportation.app.repository.BookingRepository;
 import com.ajtransportation.app.repository.TripRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -33,8 +34,7 @@ public class BookingService {
 
     @Transactional
     public Booking createBooking(User user, UUID tripId,
-                                  String pickupAddress, String dropoffAddress) {
-        // Load and check trip within same transaction
+                                 String pickupAddress, String dropoffAddress) {
         Trip trip = tripRepository.findById(tripId)
             .orElseThrow(() -> new RuntimeException("That slot no longer exists."));
 
@@ -45,7 +45,6 @@ public class BookingService {
             throw new RuntimeException("This slot has just been taken. Please choose another.");
         }
 
-        // Mark trip PENDING within same transaction — no separate @Transactional call
         trip.setStatus("PENDING");
         tripRepository.save(trip);
 
@@ -63,7 +62,7 @@ public class BookingService {
 
     @Transactional
     public Booking createBookingForOpenSlot(User user, LocalDate date, LocalTime startTime,
-                                             String pickupAddress, String dropoffAddress) {
+                                            String pickupAddress, String dropoffAddress) {
         Trip trip = tripService.createOnTheFlyTrip(date, startTime, pickupAddress, dropoffAddress);
 
         Booking booking = new Booking();
@@ -79,8 +78,11 @@ public class BookingService {
     }
 
     /**
-     * Accept — update booking AND trip status in one transaction.
-     * No delegation to TripService to avoid nested transaction conflicts on Supabase.
+     * Admin accepts a TODAY booking.
+     * Sets status to AWAITING_PAYMENT — this is what the user's waiting screen
+     * polls for. Once detected, the JS redirects the user to /payment/initiate/{id}
+     * which sends them to Ozow to complete payment.
+     * Trip is marked BOOKED immediately to hold the slot.
      */
     @Transactional
     public void acceptBooking(UUID bookingId) {
@@ -89,8 +91,7 @@ public class BookingService {
 
         Trip trip = booking.getTrip();
 
-        // Update both in the same transaction
-        booking.setStatus("CONFIRMED");
+        booking.setStatus("AWAITING_PAYMENT");
         booking.setPaymentStatus("AWAITING_PAYMENT");
         bookingRepository.save(booking);
 
@@ -99,8 +100,9 @@ public class BookingService {
     }
 
     /**
-     * Reject — delete on-the-fly trips and their booking.
-     * For admin-created trips: mark REJECTED, restore trip to AVAILABLE.
+     * Admin rejects a booking.
+     * On-the-fly trips are deleted entirely.
+     * Admin-created trips are marked REJECTED and slot restored to AVAILABLE.
      */
     @Transactional
     public void rejectBooking(UUID bookingId) {
@@ -110,7 +112,6 @@ public class BookingService {
         Trip trip = booking.getTrip();
 
         if ("User Request".equals(trip.getLabel())) {
-            // Delete booking first (FK reference), then trip
             bookingRepository.delete(booking);
             bookingRepository.flush();
             tripRepository.deleteById(trip.getId());
@@ -154,6 +155,16 @@ public class BookingService {
             });
     }
 
+    /**
+     * Polling endpoint used by booking-waiting.html every 3 seconds.
+     *
+     * Status flow the waiting screen cares about:
+     *   PENDING_APPROVAL → still waiting, check expiry
+     *   AWAITING_PAYMENT → admin accepted, JS will redirect user to /payment/initiate/{id}
+     *   REJECTED         → admin rejected, show rejected message
+     *   EXPIRED          → timed out, show expired message
+     *   anything else    → show cancelled message
+     */
     @Transactional
     public String getBookingStatusForPolling(UUID bookingId) {
         Booking booking = bookingRepository.findById(bookingId).orElse(null);
@@ -188,7 +199,7 @@ public class BookingService {
 
     public Booking getBookingById(UUID id) {
         return bookingRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+            .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
     }
 
     public List<Booking> getUserBookings(User user) {
@@ -197,10 +208,11 @@ public class BookingService {
 
     public long countActiveBookings(User user) {
         return bookingRepository.findByUser(user)
-                .stream()
-                .filter(b -> "PENDING_APPROVAL".equals(b.getStatus())
-                          || "CONFIRMED".equals(b.getStatus()))
-                .count();
+            .stream()
+            .filter(b -> "PENDING_APPROVAL".equals(b.getStatus())
+                      || "AWAITING_PAYMENT".equals(b.getStatus())
+                      || "CONFIRMED".equals(b.getStatus()))
+            .count();
     }
 
     @Transactional

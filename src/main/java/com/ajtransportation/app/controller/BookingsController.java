@@ -15,6 +15,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.LinkedHashMap;
@@ -25,21 +26,22 @@ import java.util.UUID;
 @Controller
 public class BookingsController {
 
-    private final TripService tripService;
-    private final BookingService bookingService;
-    private final UserService userService;
+    private final TripService          tripService;
+    private final BookingService       bookingService;
+    private final UserService          userService;
     private final BusinessHoursService businessHoursService;
-    private final GoogleMapsService googleMapsService;
+    private final GoogleMapsService    googleMapsService;
 
-    public BookingsController(TripService tripService, BookingService bookingService,
-                               UserService userService,
-                               BusinessHoursService businessHoursService,
-                               GoogleMapsService googleMapsService) {
-        this.tripService = tripService;
-        this.bookingService = bookingService;
-        this.userService = userService;
+    public BookingsController(TripService tripService,
+                              BookingService bookingService,
+                              UserService userService,
+                              BusinessHoursService businessHoursService,
+                              GoogleMapsService googleMapsService) {
+        this.tripService          = tripService;
+        this.bookingService       = bookingService;
+        this.userService          = userService;
         this.businessHoursService = businessHoursService;
-        this.googleMapsService = googleMapsService;
+        this.googleMapsService    = googleMapsService;
     }
 
     private ObjectMapper buildMapper() {
@@ -55,35 +57,29 @@ public class BookingsController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate week,
             Model model) throws JsonProcessingException {
 
-        // Default to today — calendar always starts from the current day
         LocalDate today = LocalDate.now();
         if (week == null) week = today;
-
-        // Don't allow navigating before today
         if (week.isBefore(today)) week = today;
 
-        // Don't allow navigating more than 1 year ahead
         LocalDate maxStart = businessHoursService.maxBookingDate().minusDays(6);
         if (week.isAfter(maxStart)) week = maxStart;
 
-        List<Trip> trips = tripService.getVisibleTripsForWeek(week);
+        List<Trip> trips          = tripService.getVisibleTripsForWeek(week);
+        ObjectMapper mapper       = buildMapper();
+        String tripsJson          = mapper.writeValueAsString(trips);
+        String businessHoursJson  = buildBusinessHoursJson(week, mapper);
 
-        ObjectMapper mapper = buildMapper();
-        String tripsJson         = mapper.writeValueAsString(trips);
-        String businessHoursJson = buildBusinessHoursJson(week, mapper);
-
-        model.addAttribute("tripsJson",          tripsJson);
-        model.addAttribute("businessHoursJson",  businessHoursJson);
+        model.addAttribute("tripsJson",         tripsJson);
+        model.addAttribute("businessHoursJson", businessHoursJson);
         model.addAttribute("weekStart",  week);
         model.addAttribute("weekEnd",    week.plusDays(6));
         model.addAttribute("prevWeek",   week.minusDays(7));
         model.addAttribute("nextWeek",   week.plusDays(7));
-        model.addAttribute("minWeek",    today);
-        model.addAttribute("maxWeek",    maxStart);
+        model.addAttribute("today",      today);
         return "user/bookings";
     }
 
-    @GetMapping("/bookings/calculate-fare")
+    @GetMapping("/calculate-fare")
     @ResponseBody
     public Map<String, Object> calculateFare(
             @RequestParam("pickup")  String pickup,
@@ -91,18 +87,22 @@ public class BookingsController {
 
         Map<String, Object> result = new LinkedHashMap<>();
         try {
-            GoogleMapsService.DistanceResult dr = googleMapsService.getDistanceAndEta(pickup, dropoff);
-            if (dr == null) {
+            var dist = googleMapsService.getDistanceAndEta(pickup, dropoff);
+            if (dist != null) {
+                var config  = tripService.getPricingConfig();
+                var rate    = config.getRatePerKm();
+                var minFare = config.getMinimumFare();
+                var calc    = dist.distanceKm.multiply(rate);
+                var fare    = calc.compareTo(minFare) < 0 ? minFare : calc;
+                fare = fare.setScale(2, java.math.RoundingMode.HALF_UP);
+                result.put("success",    true);
+                result.put("fare",       fare);
+                result.put("distanceKm", dist.distanceKm);
+                result.put("etaMinutes", dist.etaMinutes);
+            } else {
                 result.put("success", false);
                 result.put("error",   "Could not calculate fare. The driver will confirm your fare.");
-                return result;
             }
-            java.math.BigDecimal rate        = java.math.BigDecimal.valueOf(8.0);
-            java.math.BigDecimal minimumFare = java.math.BigDecimal.valueOf(50.0);
-            java.math.BigDecimal fare        = googleMapsService.calculateFee(dr.distanceKm, rate, minimumFare);
-            result.put("success",    true);
-            result.put("distanceKm", dr.distanceKm);
-            result.put("fare",       fare);
         } catch (Exception e) {
             result.put("success", false);
             result.put("error",   "Could not calculate fare. The driver will confirm your fare.");
@@ -150,11 +150,17 @@ public class BookingsController {
         return result;
     }
 
+    /**
+     * POST /bookings/book
+     *
+     * TODAY bookings  → waiting screen (admin must accept first, then Ozow redirect)
+     * FUTURE bookings → straight to /payment/initiate/{id} (direct Ozow redirect)
+     */
     @PostMapping("/bookings/book")
     public String bookTrip(
-            @RequestParam(value = "tripId",        required = false) String tripId,
-            @RequestParam(value = "slotDate",      required = false) String slotDate,
-            @RequestParam(value = "slotTime",      required = false) String slotTime,
+            @RequestParam(value = "tripId",   required = false) String tripId,
+            @RequestParam(value = "slotDate", required = false) String slotDate,
+            @RequestParam(value = "slotTime", required = false) String slotTime,
             @RequestParam("pickupAddress")  String pickupAddress,
             @RequestParam("dropoffAddress") String dropoffAddress,
             @AuthenticationPrincipal UserDetails userDetails,
@@ -173,30 +179,39 @@ public class BookingsController {
 
         try {
             Booking booking;
+            LocalDate tripDate;
+
             if (tripId != null && !tripId.isBlank()) {
                 Trip trip = tripService.getTripById(UUID.fromString(tripId));
                 if (businessHoursService.isPastSlot(trip.getDate(), trip.getStartTime())) {
                     ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
                     return "redirect:/bookings";
                 }
-                booking = bookingService.createBooking(user, UUID.fromString(tripId),
-                        pickupAddress, dropoffAddress);
+                tripDate = trip.getDate();
+                booking  = bookingService.createBooking(user, UUID.fromString(tripId),
+                               pickupAddress, dropoffAddress);
             } else {
                 if (slotDate == null || slotTime == null) {
                     ra.addFlashAttribute("errorMessage", "Invalid slot selection. Please try again.");
                     return "redirect:/bookings";
                 }
-                LocalDate date      = LocalDate.parse(slotDate);
+                tripDate            = LocalDate.parse(slotDate);
                 LocalTime startTime = LocalTime.parse(slotTime);
-                if (businessHoursService.isPastSlot(date, startTime)) {
+                if (businessHoursService.isPastSlot(tripDate, startTime)) {
                     ra.addFlashAttribute("errorMessage", "That time slot has already passed.");
                     return "redirect:/bookings";
                 }
-                booking = bookingService.createBookingForOpenSlot(user, date, startTime,
-                        pickupAddress, dropoffAddress);
+                booking = bookingService.createBookingForOpenSlot(user, tripDate, startTime,
+                              pickupAddress, dropoffAddress);
             }
 
-            return "redirect:/bookings/waiting/" + booking.getId();
+            // TODAY → waiting screen (admin approves first, then user goes to Ozow)
+            // FUTURE → straight to Ozow (no admin approval needed)
+            if (tripDate.isEqual(LocalDate.now())) {
+                return "redirect:/bookings/waiting/" + booking.getId();
+            } else {
+                return "redirect:/payment/initiate/" + booking.getId();
+            }
 
         } catch (RuntimeException e) {
             ra.addFlashAttribute("errorMessage", e.getMessage());
