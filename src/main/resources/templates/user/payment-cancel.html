@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Cancelled — AJ Transportation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        body { margin: 0; background: var(--bg); }
+        .cancel-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .cancel-card {
+            background: white;
+            border-radius: 24px;
+            padding: 40px 32px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.10);
+            text-align: center;
+        }
+        .cancel-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #fee2e2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            margin: 0 auto 24px;
+        }
+        .info-box {
+            background: #fff8e6;
+            border: 1px solid rgba(240,165,0,0.35);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin: 20px 0;
+            font-size: 0.84rem;
+            color: #92400e;
+            text-align: left;
+            line-height: 1.6;
+        }
+        .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+<div class="cancel-page">
+    <div class="cancel-card">
+
+        <div class="cancel-icon">❌</div>
+
+        <h2 style="font-family:'Syne',sans-serif;font-size:1.4rem;margin-bottom:10px;">
+            Payment not completed
+        </h2>
+        <p style="color:var(--text-muted);font-size:0.9rem;line-height:1.6;margin-bottom:0;"
+           th:text="${message}">
+            Your payment was not completed.
+        </p>
+
+        <div class="info-box">
+            ℹ️ Your booking slot has been released. If you still need a trip,
+            please go back and make a new booking — your previous slot may
+            already be taken by someone else.
+        </div>
+
+        <div class="actions">
+            <a href="/bookings" class="btn btn-primary"
+               style="justify-content:center;">
+                ← Try Booking Again
+            </a>
+            <a href="/dashboard" class="btn btn-secondary"
+               style="justify-content:center;">
+                Go to My Dashboard
+            </a>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>

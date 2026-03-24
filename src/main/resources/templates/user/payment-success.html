@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful — AJ Transportation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        body { margin: 0; background: var(--bg); }
+        .success-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .success-card {
+            background: white;
+            border-radius: 24px;
+            padding: 40px 32px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.10);
+            text-align: center;
+        }
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #dcfce7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            margin: 0 auto 24px;
+        }
+        .trip-details {
+            background: var(--bg);
+            border-radius: 14px;
+            padding: 16px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+        .detail-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .detail-key { color: var(--text-muted); font-weight: 500; }
+        .detail-val { font-weight: 600; color: var(--text-dark); text-align: right; max-width: 60%; }
+        .fare-val   { color: var(--primary); font-size: 1rem; }
+        .actions    { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+        .confirmed-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #dcfce7;
+            border: 1px solid #bbf7d0;
+            border-radius: 99px;
+            padding: 4px 14px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #16a34a;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="success-page">
+    <div class="success-card">
+
+        <div class="success-icon">✅</div>
+
+        <div class="confirmed-badge">✓ Payment Confirmed</div>
+
+        <h2 style="font-family:'Syne',sans-serif;font-size:1.5rem;margin-bottom:10px;">
+            You're all booked!
+        </h2>
+        <p style="color:var(--text-muted);font-size:0.9rem;line-height:1.6;margin-bottom:4px;">
+            Your payment was successful and your trip is confirmed.
+            A confirmation email will be sent to you shortly.
+        </p>
+
+        <!-- Trip details if available -->
+        <div class="trip-details" th:if="${fare != null}">
+            <div class="detail-row" th:if="${date != null}">
+                <span class="detail-key">Date</span>
+                <span class="detail-val"
+                      th:text="${#temporals.format(date,'EEE dd MMM yyyy')}">—</span>
+            </div>
+            <div class="detail-row" th:if="${time != null}">
+                <span class="detail-key">Time</span>
+                <span class="detail-val"
+                      th:text="${#temporals.format(time,'HH:mm')}">—</span>
+            </div>
+            <div class="detail-row" th:if="${pickup != null}">
+                <span class="detail-key">Pickup</span>
+                <span class="detail-val" th:text="${pickup}">—</span>
+            </div>
+            <div class="detail-row" th:if="${dropoff != null}">
+                <span class="detail-key">Dropoff</span>
+                <span class="detail-val" th:text="${dropoff}">—</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-key">Amount Paid</span>
+                <span class="detail-val fare-val" th:text="${fare}">—</span>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="/dashboard" class="btn btn-primary"
+               style="justify-content:center;">
+                Go to My Dashboard →
+            </a>
+            <a href="/bookings" class="btn btn-secondary"
+               style="justify-content:center;">
+                Book Another Trip
+            </a>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>

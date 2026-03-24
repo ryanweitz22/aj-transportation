@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finding Your Driver — AJ Transportation</title>
+    <title>Waiting for Approval — AJ Transportation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/style.css}">
     <style>
-        body { background: var(--bg); }
+        body { margin: 0; background: var(--bg); }
 
         .waiting-page {
             min-height: 100vh;
@@ -21,18 +21,18 @@
         .waiting-card {
             background: white;
             border-radius: 24px;
-            padding: 40px 36px;
+            padding: 40px 32px;
             width: 100%;
-            max-width: 460px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            max-width: 440px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.10);
             text-align: center;
         }
 
         .spinner-wrap {
             width: 80px;
             height: 80px;
-            margin: 0 auto 24px;
             position: relative;
+            margin: 0 auto 24px;
         }
         .spinner-ring {
             width: 80px;
@@ -126,6 +126,13 @@
             color: var(--text-muted);
             margin-bottom: 8px;
         }
+
+        .redirect-notice {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 12px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -141,10 +148,12 @@
         <div class="status-icon icon-rejected"  id="icon-rejected">❌</div>
         <div class="status-icon icon-expired"   id="icon-expired">⏱️</div>
 
-        <h2 id="waiting-title" style="font-family:'Syne',sans-serif;font-size:1.4rem;margin-bottom:8px;">
+        <h2 id="waiting-title"
+            style="font-family:'Syne',sans-serif;font-size:1.4rem;margin-bottom:8px;">
             Finding your driver...
         </h2>
-        <p id="waiting-subtitle" style="color:var(--text-muted);font-size:0.9rem;line-height:1.6;margin-bottom:0;">
+        <p id="waiting-subtitle"
+           style="color:var(--text-muted);font-size:0.9rem;line-height:1.6;margin-bottom:0;">
             Your booking request has been sent. Please wait while the driver reviews it.
         </p>
 
@@ -158,19 +167,23 @@
         <div class="trip-details">
             <div class="detail-row">
                 <span class="detail-key">Date</span>
-                <span class="detail-val" th:text="${#temporals.format(date,'EEE dd MMM yyyy')}">—</span>
+                <span class="detail-val"
+                      th:text="${#temporals.format(date,'EEE dd MMM yyyy')}">—</span>
             </div>
             <div class="detail-row">
                 <span class="detail-key">Time</span>
-                <span class="detail-val" th:text="${#temporals.format(time,'HH:mm')}">—</span>
+                <span class="detail-val"
+                      th:text="${#temporals.format(time,'HH:mm')}">—</span>
             </div>
             <div class="detail-row">
                 <span class="detail-key">Pickup</span>
-                <span class="detail-val" th:text="${pickup != null ? pickup : '—'}">—</span>
+                <span class="detail-val"
+                      th:text="${pickup != null ? pickup : '—'}">—</span>
             </div>
             <div class="detail-row">
                 <span class="detail-key">Dropoff</span>
-                <span class="detail-val" th:text="${dropoff != null ? dropoff : '—'}">—</span>
+                <span class="detail-val"
+                      th:text="${dropoff != null ? dropoff : '—'}">—</span>
             </div>
             <div class="detail-row">
                 <span class="detail-key">Estimated Fare</span>
@@ -191,9 +204,8 @@
             ← Try Another Slot
         </a>
 
-        <p id="redirect-notice"
-           style="display:none;font-size:0.8rem;color:var(--text-muted);margin-top:12px;">
-            Redirecting to your dashboard...
+        <p id="redirect-notice" class="redirect-notice">
+            Redirecting to payment...
         </p>
 
     </div>
@@ -257,15 +269,17 @@
         document.getElementById('countdown-wrap').style.display = 'none';
         document.getElementById('pulse-dots').style.display     = 'none';
 
-        if (status === 'CONFIRMED') {
-            document.getElementById('icon-confirmed').style.display  = 'flex';
-            document.getElementById('waiting-title').textContent     = 'Booking confirmed! 🎉';
-            document.getElementById('waiting-subtitle').textContent  =
-                'Your booking has been accepted. Redirecting to your dashboard...';
-            document.getElementById('btn-dashboard').classList.add('show');
+        if (status === 'AWAITING_PAYMENT') {
+            // Admin accepted — redirect user to Ozow payment page
+            document.getElementById('icon-confirmed').style.display = 'flex';
+            document.getElementById('waiting-title').textContent    = 'Booking accepted! 🎉';
+            document.getElementById('waiting-subtitle').textContent =
+                'Your booking has been approved. Redirecting you to complete payment...';
             document.getElementById('redirect-notice').style.display = 'block';
-            // Auto-redirect after 2.5 seconds
-            setTimeout(() => { window.location.href = '/dashboard'; }, 2500);
+            // Small delay so user sees the confirmation before being sent to Ozow
+            setTimeout(() => {
+                window.location.href = '/payment/initiate/' + BOOKING_ID;
+            }, 2000);
 
         } else if (status === 'REJECTED') {
             document.getElementById('icon-rejected').style.display  = 'flex';
@@ -284,7 +298,8 @@
         } else {
             document.getElementById('icon-expired').style.display   = 'flex';
             document.getElementById('waiting-title').textContent    = 'Booking cancelled';
-            document.getElementById('waiting-subtitle').textContent = 'This booking has been cancelled.';
+            document.getElementById('waiting-subtitle').textContent =
+                'This booking has been cancelled.';
             document.getElementById('btn-bookagain').classList.add('show');
         }
     }
