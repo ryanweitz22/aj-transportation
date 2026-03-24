@@ -3,11 +3,15 @@ package com.ajtransportation.app.controller;
 import com.ajtransportation.app.model.Booking;
 import com.ajtransportation.app.model.PricingConfig;
 import com.ajtransportation.app.model.Trip;
+import com.ajtransportation.app.model.User;
 import com.ajtransportation.app.repository.BookingRepository;
 import com.ajtransportation.app.service.BookingService;
 import com.ajtransportation.app.service.TripService;
+import com.ajtransportation.app.service.UserService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -31,13 +35,16 @@ public class AdminTripController {
     private final TripService tripService;
     private final BookingService bookingService;
     private final BookingRepository bookingRepository;
+    private final UserService userService;
 
     public AdminTripController(TripService tripService,
                                 BookingService bookingService,
-                                BookingRepository bookingRepository) {
+                                BookingRepository bookingRepository,
+                                UserService userService) {
         this.tripService = tripService;
         this.bookingService = bookingService;
         this.bookingRepository = bookingRepository;
+        this.userService = userService;
     }
 
     @GetMapping
@@ -45,22 +52,18 @@ public class AdminTripController {
         LocalDate today = LocalDate.now();
         LocalTime now   = LocalTime.now();
 
-        // Fetch next 4 weeks
         List<Trip> allTrips = tripService.getTripsForRange(today, today.plusWeeks(4));
 
-        // Include BLOCKED trips alongside others — filter out only past times
         List<Trip> trips = allTrips.stream()
             .filter(t -> {
                 if (t.getDate().isAfter(today)) return true;
                 if (t.getDate().isBefore(today)) return false;
-                // Today — always show BLOCKED and BOOKED even if past
                 if ("BLOCKED".equals(t.getStatus())
                     || "BOOKED".equals(t.getStatus())) return true;
                 return t.getStartTime().isAfter(now);
             })
             .collect(Collectors.toList());
 
-        // Build bookingByTripId map for BOOKED/PENDING trips
         Map<UUID, Booking> bookingByTripId = new HashMap<>();
         for (Trip trip : trips) {
             if ("BOOKED".equals(trip.getStatus())
@@ -71,7 +74,6 @@ public class AdminTripController {
             }
         }
 
-        // 1-hour cancel rule for BOOKED trips
         Map<UUID, Boolean> canCancelMap = new HashMap<>();
         for (Trip trip : trips) {
             if ("BOOKED".equals(trip.getStatus())) {
@@ -101,29 +103,52 @@ public class AdminTripController {
 
     @PostMapping("/new")
     public String createTrip(
-            @RequestParam("date")      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam("startTime") String startTime,
-            @RequestParam("label")     String label,
-            @RequestParam(value = "pickupAddress",  required = false) String pickupAddress,
-            @RequestParam(value = "dropoffAddress", required = false) String dropoffAddress,
+            @RequestParam("date")          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam("startTime")     String startTime,
+            @RequestParam("label")         String label,
+            @RequestParam("pickupAddress") String pickupAddress,
+            @RequestParam("dropoffAddress") String dropoffAddress,
+            @RequestParam("clientName")    String clientName,
+            @RequestParam(value = "notes", required = false) String notes,
+            @AuthenticationPrincipal UserDetails userDetails,
             RedirectAttributes redirectAttributes) {
 
+        // Build the reason string for the Booked By column
+        String reason = "Client: " + clientName.trim();
+        if (notes != null && !notes.isBlank()) {
+            reason += " | Notes: " + notes.trim();
+        }
+
+        // Create the trip as BOOKED immediately
         Trip trip = new Trip();
         trip.setDate(date);
         trip.setStartTime(LocalTime.parse(startTime));
         trip.setLabel(label);
         trip.setPickupAddress(pickupAddress);
         trip.setDropoffAddress(dropoffAddress);
-        trip.setStatus("AVAILABLE");
+        trip.setStatus("BOOKED");
+        trip.setBlockedReason(reason);
 
         Trip saved = tripService.createTrip(trip);
 
+        // Create a Booking record linked to the admin user
+        User admin = userService.findByEmail(userDetails.getUsername());
+        Booking booking = new Booking();
+        booking.setTrip(saved);
+        booking.setUser(admin);
+        booking.setPickupAddress(pickupAddress);
+        booking.setDropoffAddress(dropoffAddress);
+        booking.setStatus("CONFIRMED");
+        booking.setPaymentStatus("CASH");
+        booking.setCreatedAt(LocalDateTime.now());
+        bookingRepository.save(booking);
+
         String message = saved.getDistanceKm() != null
-            ? String.format("Trip created ✓ — %.1f km, %d min ETA + 15 min buffer. Fee: R%.2f",
+            ? String.format("Cash trip created ✓ — %s | %.1f km, Fee: R%.2f",
+                clientName.trim(),
                 saved.getDistanceKm().doubleValue(),
-                saved.getGoogleEtaMinutes(),
                 saved.getFee() != null ? saved.getFee().doubleValue() : 0.0)
-            : "Trip slot created for " + date + " at " + startTime;
+            : "Cash trip created for " + clientName.trim() + " on " + date + " at " + startTime;
 
         redirectAttributes.addFlashAttribute("successMessage", message);
         return "redirect:/admin/trips/new";
@@ -173,7 +198,6 @@ public class AdminTripController {
         return "redirect:/admin/trips";
     }
 
-    // Cancel booking — 1-hour rule enforced server-side
     @PostMapping("/cancel/{id}")
     public String cancelBooking(@PathVariable UUID id,
                                 RedirectAttributes ra) {
@@ -195,7 +219,6 @@ public class AdminTripController {
         return "redirect:/admin/trips";
     }
 
-    // Cancel a BLOCKED slot — frees it back to AVAILABLE
     @PostMapping("/cancel-block/{id}")
     public String cancelBlock(@PathVariable UUID id,
                               RedirectAttributes ra) {
