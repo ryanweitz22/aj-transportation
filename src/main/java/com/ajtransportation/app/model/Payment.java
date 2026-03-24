@@ -20,15 +20,19 @@ public class Payment {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "payfast_payment_id")
-    private String payfastPaymentId;
+    // Ozow's unique transaction ID returned in the ITN callback
+    @Column(name = "ozow_transaction_id")
+    private String ozowTransactionId;
 
-    @Column(name = "payfast_token")
-    private String payfastToken;
+    // Your internal reference sent to Ozow (bookingId string)
+    @Column(name = "ozow_reference")
+    private String ozowReference;
 
+    // OZOW or CASH
     @Column(name = "payment_type")
     private String paymentType;
 
+    // PENDING → PAID / FAILED
     @Column(nullable = false)
     private String status = "PENDING";
 
@@ -46,11 +50,11 @@ public class Payment {
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }
 
-    public String getPayfastPaymentId() { return payfastPaymentId; }
-    public void setPayfastPaymentId(String payfastPaymentId) { this.payfastPaymentId = payfastPaymentId; }
+    public String getOzowTransactionId() { return ozowTransactionId; }
+    public void setOzowTransactionId(String ozowTransactionId) { this.ozowTransactionId = ozowTransactionId; }
 
-    public String getPayfastToken() { return payfastToken; }
-    public void setPayfastToken(String payfastToken) { this.payfastToken = payfastToken; }
+    public String getOzowReference() { return ozowReference; }
+    public void setOzowReference(String ozowReference) { this.ozowReference = ozowReference; }
 
     public String getPaymentType() { return paymentType; }
     public void setPaymentType(String paymentType) { this.paymentType = paymentType; }
